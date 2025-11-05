@@ -1,9 +1,8 @@
-import { Clock, Layers3, Plus, Wallet } from "lucide-react";
+import { Clock, Layers3, Wallet } from "lucide-react";
 
 import { formatCurrency, formatDate } from "@/lib/format";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import type { Database } from "@/types/supabase";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { CreateAccountForm } from "@/components/forms/create-account-form";
 
 const ACCOUNT_TYPE_LABEL: Record<
   Database["public"]["Enums"]["account_type"],
@@ -46,10 +46,7 @@ export default async function AccountsPage() {
             the ledger here before wiring categories and budgets.
           </p>
         </div>
-        <Button type="button" className="inline-flex items-center gap-2" disabled>
-          <Plus className="size-4" aria-hidden="true" />
-          Add account
-        </Button>
+        <CreateAccountForm />
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
