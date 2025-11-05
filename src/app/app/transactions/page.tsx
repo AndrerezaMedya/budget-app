@@ -1,7 +1,9 @@
 import { formatCurrency, formatDate } from "@/lib/format";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchCategories } from "@/lib/supabase/queries/categories";
+import { fetchPayees } from "@/lib/supabase/queries/payees";
 import { fetchRecentTransactions } from "@/lib/supabase/queries/transactions";
+import { fetchTags } from "@/lib/supabase/queries/tags";
 import { CreateTransactionForm } from "@/components/forms/create-transaction-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,9 +33,11 @@ function deriveSignedAmount(
 }
 
 export default async function TransactionsPage() {
-  const [{ accounts }, categories, recentTransactions] = await Promise.all([
+  const [{ accounts }, categories, payees, tags, recentTransactions] = await Promise.all([
     fetchAccounts(),
     fetchCategories(),
+    fetchPayees(),
+    fetchTags(),
     fetchRecentTransactions(25),
   ]);
 
@@ -42,6 +46,9 @@ export default async function TransactionsPage() {
     id: account.id,
     name: account.name,
   }));
+
+  const payeeOptions = payees.map((payee) => ({ id: payee.id, name: payee.name }));
+  const tagOptions = tags.map((tag) => ({ id: tag.id, name: tag.name, color: tag.color }));
 
   const defaultOccurredAt = new Date().toISOString().slice(0, 16);
 
@@ -62,6 +69,8 @@ export default async function TransactionsPage() {
           <CreateTransactionForm
             accounts={accountOptions}
             categories={categories}
+            payees={payeeOptions}
+            tags={tagOptions}
             defaultOccurredAt={defaultOccurredAt}
           />
         </div>
