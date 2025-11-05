@@ -1,5 +1,8 @@
 import { cookies } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import type { Database } from "@/types/supabase";
 
 const supabaseUrlEnv = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKeyEnv = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -25,13 +28,13 @@ type SupabaseCookie = {
 function createSupabaseClientWithCookies(
   cookieStore: CookieStore,
   { allowCookieWrite }: { allowCookieWrite: boolean },
-) {
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+): SupabaseClient<Database> {
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
       },
-  setAll(cookiesToSet: SupabaseCookie[]) {
+      setAll(cookiesToSet: SupabaseCookie[]) {
         for (const { name, value, options } of cookiesToSet) {
           try {
             cookieStore.set(name, value, options);
