@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { BudgetActions } from "@/components/forms/budget-actions";
 import { CreateBudgetForm } from "@/components/forms/create-budget-form";
 
 function determineStatusText(
@@ -160,6 +161,9 @@ export default async function BudgetsPage() {
                     {" "}
                     {budget.period}
                   </p>
+                  <div className="border-t border-border/60 pt-3">
+                    <BudgetActions budget={budget} categories={categories} />
+                  </div>
                 </CardContent>
               </Card>
             );
