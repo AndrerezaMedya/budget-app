@@ -5,19 +5,10 @@ import { revalidatePath } from "next/cache";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import type { ActionState } from "@/actions/types";
 import { ACCOUNT_TYPE_VALUES } from "@/config/accounts";
+import { isSupportedCurrency } from "@/config/currencies";
+import { normalizeCurrency, parseAmountToMinor } from "@/lib/currency";
 
 import type { Database } from "@/types/supabase";
-
-const ACCOUNT_CURRENCY = "IDR";
-
-function parseOpeningBalance(value: FormDataEntryValue | null): number | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  if (!trimmed) return 0;
-  const numeric = Number.parseFloat(trimmed.replace(/[^0-9.-]/g, ""));
-  if (Number.isNaN(numeric)) return null;
-  return Math.round(numeric * 100);
-}
 
 export async function createAccountAction(
   _prev: ActionState,
@@ -34,7 +25,16 @@ export async function createAccountAction(
 
   const name = (formData.get("name") as string | null)?.trim();
   const type = formData.get("type") as Database["public"]["Enums"]["account_type"] | null;
-  const openingBalanceMinor = parseOpeningBalance(formData.get("openingBalance"));
+  const currencyRaw = (formData.get("currency") as string | null)?.trim();
+  const currencyInput = normalizeCurrency(currencyRaw);
+
+  if (!currencyRaw || !isSupportedCurrency(currencyInput)) {
+    return { status: "error", message: "Select a valid currency." };
+  }
+
+  const openingBalanceMinor = parseAmountToMinor(formData.get("openingBalance"), currencyInput, {
+    allowZero: true,
+  });
 
   if (!name) {
     return { status: "error", message: "Account name is required." };
@@ -53,7 +53,7 @@ export async function createAccountAction(
     name,
     type,
     opening_balance_minor: openingBalanceMinor,
-    currency: ACCOUNT_CURRENCY,
+    currency: currencyInput,
   });
 
   if (error) {
