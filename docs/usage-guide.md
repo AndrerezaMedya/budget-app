@@ -6,7 +6,7 @@ Welcome to your personal finance workspace. This guide walks you through every a
 
 1. **Sign in** – Use the Supabase-authenticated sign-in page. After successful authentication you land on the **Overview** dashboard.
 2. **Create your first account** – Navigate to **Accounts** and add accounts representing banks, cash, credit cards, or envelopes. Opening balances are stored in minor units (multiply the displayed amount by 100 in the database).
-3. **Seed categories (optional)** – If you imported the provided seed data, categories already exist. Otherwise, create categories in **Settings → Ledger configuration** before budgeting.
+3. **Seed categories (optional)** – If you imported the provided seed data, categories already exist. Otherwise, create categories via **Settings → Categories** before budgeting.
 
 > 💡 Tip: Every major feature lives under `/app/*`. The sidebar is collapsible on mobile; use the hamburger icon in the header.
 
@@ -60,6 +60,7 @@ Welcome to your personal finance workspace. This guide walks you through every a
 ## Settings
 
 - Manage profile, workspace preferences, category tree, and integrations.
+- Use *Add category* to create parent or nested categories; optional icon and color fields help with visual organisation.
 - Theme toggle lives in the global header for quick light/dark switching.
 - Sign out from either the sidebar card or the header icon (changes persist across sessions).
 
