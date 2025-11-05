@@ -9,53 +9,55 @@ import {
   Wallet,
 } from "lucide-react";
 
+import type { TranslationKey } from "@/i18n/translations";
+
 export type AppRoute = {
-  label: string;
-  description: string;
+  labelKey: TranslationKey;
+  descriptionKey: TranslationKey;
   href: string;
   icon: LucideIcon;
 };
 
 export const APP_ROUTES: AppRoute[] = [
   {
-    label: "Overview",
-    description: "Cashflow, budgets, and balances at a glance.",
+    labelKey: "nav.overview.label",
+    descriptionKey: "nav.overview.description",
     href: "/app/overview",
     icon: LayoutDashboard,
   },
   {
-    label: "Transactions",
-    description: "Search, filter, and edit ledger entries.",
+    labelKey: "nav.transactions.label",
+    descriptionKey: "nav.transactions.description",
     href: "/app/transactions",
     icon: CreditCard,
   },
   {
-    label: "Accounts",
-    description: "Manage accounts, opening balances, and transfers.",
+    labelKey: "nav.accounts.label",
+    descriptionKey: "nav.accounts.description",
     href: "/app/accounts",
     icon: Wallet,
   },
   {
-    label: "Budgets",
-    description: "Monthly category budgets with burn rate.",
+    labelKey: "nav.budgets.label",
+    descriptionKey: "nav.budgets.description",
     href: "/app/budgets",
     icon: ChartNoAxesCombined,
   },
   {
-    label: "Reports",
-    description: "Charts for expense trends and balance history.",
+    labelKey: "nav.reports.label",
+    descriptionKey: "nav.reports.description",
     href: "/app/reports",
     icon: LineChart,
   },
   {
-    label: "Imports",
-    description: "CSV import wizard and export options.",
+    labelKey: "nav.imports.label",
+    descriptionKey: "nav.imports.description",
     href: "/app/imports",
     icon: FileSpreadsheet,
   },
   {
-    label: "Settings",
-    description: "Workspace preferences and integrations.",
+    labelKey: "nav.settings.label",
+    descriptionKey: "nav.settings.description",
     href: "/app/settings",
     icon: Settings,
   },
