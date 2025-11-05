@@ -11,6 +11,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AccountActions } from "@/components/forms/account-actions";
 import { CreateAccountForm } from "@/components/forms/create-account-form";
 
 const ACCOUNT_TYPE_LABEL: Record<
@@ -149,6 +150,9 @@ export default async function AccountsPage() {
                       Added on
                     </p>
                     <p>{createdAt}</p>
+                  </div>
+                  <div className="border-t border-border/60 pt-3">
+                    <AccountActions account={account} />
                   </div>
                 </CardContent>
               </Card>
