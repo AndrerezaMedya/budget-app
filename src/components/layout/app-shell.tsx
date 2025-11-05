@@ -10,12 +10,14 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/components/providers/auth-provider";
+import { useI18n } from "@/components/providers/i18n-provider";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = React.useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, signOutUser } = useAuth();
+  const { t } = useI18n();
 
   React.useEffect(() => {
     if (!loading && !user) {
@@ -29,7 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background text-sm text-muted-foreground">
         <Loader2 className="size-6 animate-spin" aria-hidden="true" />
-        <p className="mt-3">Loading workspace...</p>
+        <p className="mt-3">{t("shell.loading.title")}</p>
       </div>
     );
   }
@@ -37,10 +39,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const accountLabel =
     (user?.user_metadata?.full_name as string | undefined) ??
     user?.email ??
-    "Personal workspace";
+    t("shell.accountFallback");
   const accountSubline = user?.email
-    ? `Signed in as ${user.email}`
-    : "Supabase session pending email association.";
+    ? t("shell.accountSignedInAs", { email: user.email })
+    : t("shell.accountPendingEmail");
 
   const handleSignOut = async () => {
     try {
@@ -64,9 +66,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <p className="text-sm font-semibold leading-tight">
-              Personal Finance
+              {t("brand.name")}
             </p>
-            <p className="text-xs text-muted-foreground">App Workspace</p>
+            <p className="text-xs text-muted-foreground">{t("brand.subtitle")}</p>
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1 overflow-y-auto px-3 py-4">
@@ -86,10 +88,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <div className="flex items-center gap-2">
                   <route.icon className="size-4 shrink-0" aria-hidden="true" />
-                  <span className="text-sm font-medium">{route.label}</span>
+                  <span className="text-sm font-medium">{t(route.labelKey)}</span>
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {route.description}
+                  {t(route.descriptionKey)}
                 </span>
               </Link>
             );
@@ -120,11 +122,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   className="w-full whitespace-nowrap sm:w-auto"
                 >
                   <LogOut className="mr-1 size-4" aria-hidden="true" />
-                  Sign out
+                  {t("auth.signOut")}
                 </Button>
               ) : (
                 <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
-                  <Link href="/sign-in">Sign in</Link>
+                  <Link href="/sign-in">{t("auth.signIn")}</Link>
                 </Button>
               )}
             </div>
@@ -139,12 +141,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               size="icon"
               className="lg:hidden"
               onClick={() => setSidebarOpen((prev) => !prev)}
-              aria-label="Toggle navigation"
+              aria-label={t("shell.nav.toggle")}
             >
               <Menu className="size-5" aria-hidden="true" />
             </Button>
             <div className="text-sm text-muted-foreground">
-              Offline-friendly finance workspace
+              {t("brand.tagline")}
             </div>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
@@ -156,7 +158,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   size="icon"
                   className="sm:hidden"
                   onClick={handleSignOut}
-                  aria-label="Sign out"
+                  aria-label={t("auth.signOut")}
                 >
                   <LogOut className="size-4" aria-hidden="true" />
                 </Button>
@@ -167,7 +169,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   onClick={handleSignOut}
                 >
                   <LogOut className="mr-1 size-4" aria-hidden="true" />
-                  Sign out
+                  {t("auth.signOut")}
                 </Button>
               </>
             ) : (
@@ -177,7 +179,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 asChild
                 className="w-full sm:w-auto"
               >
-                <Link href="/sign-in">Sign in</Link>
+                <Link href="/sign-in">{t("auth.signIn")}</Link>
               </Button>
             )}
           </div>

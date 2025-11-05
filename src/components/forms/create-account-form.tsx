@@ -1,22 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState, useEffect, useRef, useState } from "react";
 
 import { createAccountAction } from "@/actions/accounts";
 import { initialActionState } from "@/actions/types";
 import { ACCOUNT_TYPE_OPTIONS } from "@/config/accounts";
+import { ACCOUNT_CURRENCY_OPTIONS, DEFAULT_CURRENCY } from "@/config/currencies";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/components/providers/i18n-provider";
 
 export function CreateAccountForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [state, formAction] = useFormState(createAccountAction, initialActionState);
+  const [state, formAction] = useActionState(createAccountAction, initialActionState);
   const { toast } = useToast();
   const statusRef = useRef(state.status);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (state.status === statusRef.current) {
@@ -27,7 +29,7 @@ export function CreateAccountForm() {
 
     if (state.status === "success") {
       toast({
-        title: "Account created",
+        title: t("accounts.toast.create.success.title"),
         description: state.message,
         variant: "success",
       });
@@ -41,12 +43,12 @@ export function CreateAccountForm() {
 
     if (state.status === "error") {
       toast({
-        title: "Unable to create account",
+        title: t("accounts.toast.create.error.title"),
         description: state.message,
         variant: "error",
       });
     }
-  }, [state.status, state.message, toast]);
+  }, [state.status, state.message, toast, t]);
 
   const toggle = () => {
     setIsOpen((prev) => {
@@ -68,7 +70,7 @@ export function CreateAccountForm() {
         data-testid="create-account-toggle"
         {...(isOpen ? { "aria-expanded": true } : {})}
       >
-        {isOpen ? "Cancel" : "Add account"}
+        {isOpen ? t("accounts.toggle.close") : t("accounts.toggle.open")}
       </Button>
 
       {isOpen ? (
@@ -78,18 +80,7 @@ export function CreateAccountForm() {
           className="w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[20rem]"
         >
           <div className="space-y-2">
-            <Label htmlFor="account-name">Name</Label>
-            <Input
-              id="account-name"
-              name="name"
-              placeholder="e.g. Travel fund"
-              required
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="account-type">Type</Label>
+            <Label htmlFor="account-type">{t("accounts.form.type")}</Label>
             <select
               id="account-type"
               name="type"
@@ -98,9 +89,40 @@ export function CreateAccountForm() {
               defaultValue=""
             >
               <option value="" disabled>
-                Select account type
+                {t("accounts.form.type.placeholder")}
               </option>
               {ACCOUNT_TYPE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {t(option.labelKey)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="account-name">{t("accounts.form.name")}</Label>
+            <Input
+              id="account-name"
+              name="name"
+              placeholder={t("accounts.form.name.placeholder")}
+              required
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="account-currency">{t("accounts.form.currency")}</Label>
+            <select
+              id="account-currency"
+              name="currency"
+              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              defaultValue={DEFAULT_CURRENCY}
+              required
+            >
+              <option value="" disabled>
+                {t("accounts.form.currency.placeholder")}
+              </option>
+              {ACCOUNT_CURRENCY_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
@@ -109,7 +131,7 @@ export function CreateAccountForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="opening-balance">Opening balance</Label>
+            <Label htmlFor="opening-balance">{t("accounts.form.openingBalance")}</Label>
             <Input
               id="opening-balance"
               name="openingBalance"
@@ -119,13 +141,10 @@ export function CreateAccountForm() {
               min={0}
               placeholder="0.00"
             />
-            <p className="text-xs text-muted-foreground">
-              Stored in minor units (multiply by 100) on submit.
-            </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button type="submit">Save account</Button>
+            <Button type="submit">{t("accounts.save")}</Button>
           </div>
         </form>
       ) : null}

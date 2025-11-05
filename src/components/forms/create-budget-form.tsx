@@ -1,27 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
 import { createBudgetAction } from "@/actions/budgets";
 import { initialActionState } from "@/actions/types";
-import type { CategoryWithParent } from "@/lib/supabase/queries/categories";
+import { listPredefinedCategoriesByType } from "@/config/category-definitions";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useI18n } from "@/components/providers/i18n-provider";
 
 interface CreateBudgetFormProps {
-  categories: CategoryWithParent[];
   defaultPeriod: string;
 }
 
-export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetFormProps) {
+export function CreateBudgetForm({ defaultPeriod }: CreateBudgetFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [state, formAction] = useFormState(createBudgetAction, initialActionState);
+  const [state, formAction] = useActionState(createBudgetAction, initialActionState);
   const { toast } = useToast();
   const statusRef = useRef(state.status);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (state.status === statusRef.current) {
@@ -32,7 +32,7 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
 
     if (state.status === "success") {
       toast({
-        title: "Budget created",
+        title: t("budgets.toast.create.success.title"),
         description: state.message,
         variant: "success",
       });
@@ -46,24 +46,22 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
 
     if (state.status === "error") {
       toast({
-        title: "Unable to create budget",
+        title: t("budgets.toast.create.error.title"),
         description: state.message,
         variant: "error",
       });
     }
-  }, [state.status, state.message, toast]);
+  }, [state.status, state.message, toast, t]);
 
   const options = useMemo(() => {
-    return categories.map((category) => {
-      if (category.parentName) {
-        return {
-          id: category.id,
-          label: `${category.parentName} • ${category.name}`,
-        };
-      }
-      return { id: category.id, label: category.name };
-    });
-  }, [categories]);
+    const translateKey = (key: string | null, fallback: string) =>
+      key ? t(key as Parameters<typeof t>[0]) : fallback;
+
+    return listPredefinedCategoriesByType("expense").map((category) => ({
+      value: category.slug,
+      label: translateKey(category.nameKey, category.name),
+    }));
+  }, [t]);
 
   const toggle = () => {
     setIsOpen((prev) => {
@@ -86,12 +84,12 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
         size="sm"
         {...(isOpen ? { "aria-expanded": true } : {})}
       >
-        {isOpen ? "Cancel" : "Create budget"}
+        {isOpen ? t("budgets.toggle.close") : t("budgets.toggle.open")}
       </Button>
 
       {!hasCategories ? (
         <p className="text-sm text-muted-foreground" role="status">
-          Add a category before creating budgets.
+          {t("budgets.noCategories")}
         </p>
       ) : null}
 
@@ -102,19 +100,19 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
           className="w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[24rem]"
         >
           <div className="space-y-2">
-            <Label htmlFor="budget-category">Category</Label>
+            <Label htmlFor="budget-category">{t("budgets.form.category")}</Label>
             <select
               id="budget-category"
-              name="categoryId"
+              name="categorySelection"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
               required
               defaultValue=""
             >
               <option value="" disabled>
-                Select a category
+                {t("budgets.form.category.placeholder")}
               </option>
               {options.map((option) => (
-                <option key={option.id} value={option.id}>
+                <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
@@ -122,7 +120,7 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="budget-period">Period</Label>
+            <Label htmlFor="budget-period">{t("budgets.form.period")}</Label>
             <Input
               id="budget-period"
               name="period"
@@ -133,7 +131,7 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="budget-amount">Amount</Label>
+            <Label htmlFor="budget-amount">{t("budgets.form.amount")}</Label>
             <Input
               id="budget-amount"
               name="amount"
@@ -145,7 +143,7 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
               required
             />
             <p className="text-xs text-muted-foreground">
-              Stored in minor units (multiply by 100) on submit.
+              {t("budgets.form.amount.tip")}
             </p>
           </div>
 
@@ -158,12 +156,12 @@ export function CreateBudgetForm({ categories, defaultPeriod }: CreateBudgetForm
               defaultChecked
             />
             <Label htmlFor="budget-rollover" className="text-sm font-normal">
-              Enable rollover
+              {t("budgets.form.rollover")}
             </Label>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button type="submit">Save budget</Button>
+            <Button type="submit">{t("budgets.save")}</Button>
           </div>
         </form>
       ) : null}

@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
 import { createTransactionAction } from "@/actions/transactions";
 import { initialActionState } from "@/actions/types";
@@ -10,17 +9,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TransactionTagInput } from "@/components/forms/transaction-tag-input";
-import type { CategoryWithParent } from "@/lib/supabase/queries/categories";
+import { useI18n } from "@/components/providers/i18n-provider";
+import { listPredefinedCategoriesByType } from "@/config/category-definitions";
+import { DEFAULT_CURRENCY } from "@/config/currencies";
+import { formatCurrency } from "@/lib/format";
 import type { Database } from "@/types/supabase";
 
 interface AccountOption {
   id: string;
   name: string;
-}
-
-interface PayeeOption {
-  id: string;
-  name: string;
+  currency: string | null;
+  currentBalanceMinor: number;
 }
 
 interface TagOption {
@@ -33,32 +32,34 @@ type TransactionType = Database["public"]["Enums"]["transaction_type"];
 
 interface CreateTransactionFormProps {
   accounts: AccountOption[];
-  categories: CategoryWithParent[];
-  payees: PayeeOption[];
   tags: TagOption[];
   defaultOccurredAt: string;
 }
 
-const TYPE_OPTIONS: Array<{ value: TransactionType; label: string }> = [
-  { value: "expense", label: "Expense" },
-  { value: "income", label: "Income" },
-  { value: "transfer", label: "Transfer" },
+const TYPE_OPTIONS: Array<{ value: TransactionType; labelKey: "transactions.type.expense" | "transactions.type.income" | "transactions.type.transfer" }> = [
+  { value: "expense", labelKey: "transactions.type.expense" },
+  { value: "income", labelKey: "transactions.type.income" },
+  { value: "transfer", labelKey: "transactions.type.transfer" },
 ];
 
-export function CreateTransactionForm({
-  accounts,
-  categories,
-  payees,
-  tags,
-  defaultOccurredAt,
-}: CreateTransactionFormProps) {
+const SELECT_BASE_CLASSES =
+  "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: CreateTransactionFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [transactionType, setTransactionType] = useState<TransactionType>("expense");
-  const [state, formAction] = useFormState(createTransactionAction, initialActionState);
+  const [incomeCategorySlug, setIncomeCategorySlug] = useState<string>("");
+  const [expenseParentSlug, setExpenseParentSlug] = useState<string>("");
+  const [expenseChildSlug, setExpenseChildSlug] = useState<string>("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [transferFromId, setTransferFromId] = useState<string>("");
+  const [transferToId, setTransferToId] = useState<string>("");
+  const [state, formAction] = useActionState(createTransactionAction, initialActionState);
   const { toast } = useToast();
   const statusRef = useRef(state.status);
   const [tagResetKey, setTagResetKey] = useState(0);
+  const { t } = useI18n();
 
   useEffect(() => {
     if (state.status === statusRef.current) {
@@ -69,7 +70,7 @@ export function CreateTransactionForm({
 
     if (state.status === "success") {
       toast({
-        title: "Transaction saved",
+        title: t("transactions.toast.create.success.title"),
         description: state.message,
         variant: "success",
       });
@@ -77,6 +78,12 @@ export function CreateTransactionForm({
       const frame = requestAnimationFrame(() => {
         formRef.current?.reset();
         setTransactionType("expense");
+        setIncomeCategorySlug("");
+        setExpenseParentSlug("");
+        setExpenseChildSlug("");
+        setSelectedAccountId("");
+        setTransferFromId("");
+        setTransferToId("");
         setIsOpen(false);
         setTagResetKey((value) => value + 1);
       });
@@ -85,18 +92,24 @@ export function CreateTransactionForm({
 
     if (state.status === "error") {
       toast({
-        title: "Unable to save transaction",
+        title: t("transactions.toast.create.error.title"),
         description: state.message,
         variant: "error",
       });
     }
-  }, [state.status, state.message, toast]);
+  }, [state.status, state.message, toast, t]);
 
   const toggle = () => {
     setIsOpen((prev) => {
       if (prev) {
         formRef.current?.reset();
         setTransactionType("expense");
+        setIncomeCategorySlug("");
+        setExpenseParentSlug("");
+        setExpenseChildSlug("");
+        setSelectedAccountId("");
+        setTransferFromId("");
+        setTransferToId("");
         setTagResetKey((value) => value + 1);
       }
       return !prev;
@@ -104,17 +117,75 @@ export function CreateTransactionForm({
   };
   const hasAccounts = accounts.length > 0;
 
-  const categoryOptions = useMemo(() => {
-    return categories.map((category) => {
-      if (category.parentName) {
+  const decoratedAccountOptions = useMemo(
+    () =>
+      accounts.map((account) => {
+        const currency = (account.currency ?? DEFAULT_CURRENCY).toUpperCase();
+        const balanceLabel = formatCurrency(account.currentBalanceMinor, currency);
         return {
-          id: category.id,
-          label: `${category.parentName} • ${category.name}`,
+          ...account,
+          currency,
+          label: `${account.name} — ${balanceLabel} (${currency})`,
         };
-      }
-      return { id: category.id, label: category.name };
+      }),
+    [accounts],
+  );
+
+  const accountMap = useMemo(
+    () => new Map(decoratedAccountOptions.map((account) => [account.id, account])),
+    [decoratedAccountOptions],
+  );
+
+  const selectedAccount = selectedAccountId ? accountMap.get(selectedAccountId) ?? null : null;
+  const transferFromAccount = transferFromId ? accountMap.get(transferFromId) ?? null : null;
+  const transferToAccount = transferToId ? accountMap.get(transferToId) ?? null : null;
+
+  useEffect(() => {
+    if (transferFromId && transferFromId === transferToId) {
+      setTransferToId("");
+    }
+  }, [transferFromId, transferToId]);
+
+  const incomeCategoryOptions = useMemo(() => {
+    const translateKey = (key: string | null, fallback: string) =>
+      key ? t(key as Parameters<typeof t>[0]) : fallback;
+
+    return listPredefinedCategoriesByType("income").map((category) => ({
+      slug: category.slug,
+      label: translateKey(category.nameKey, category.name),
+    }));
+  }, [t]);
+
+  const expenseCategoryStructure = useMemo(() => {
+    const translateKey = (key: string | null, fallback: string) =>
+      key ? t(key as Parameters<typeof t>[0]) : fallback;
+
+    const catalog = listPredefinedCategoriesByType("expense").map((category) => ({
+      slug: category.slug,
+      label: translateKey(category.nameKey, category.name),
+      children: (category.subcategories ?? []).map((subcategory) => ({
+        slug: subcategory.slug,
+        label: translateKey(subcategory.nameKey, subcategory.name),
+      })),
+    }));
+
+    const children = new Map<string, Array<{ slug: string; label: string }>>();
+
+    catalog.forEach((category) => {
+      children.set(category.slug, category.children);
     });
-  }, [categories]);
+
+    const parents = catalog.map(({ slug, label }) => ({ slug, label }));
+
+    return { parents, children };
+  }, [t]);
+
+  const currentExpenseChildren = useMemo(() => {
+    if (!expenseParentSlug) {
+      return [] as Array<{ slug: string; label: string }>;
+    }
+    return expenseCategoryStructure.children.get(expenseParentSlug) ?? [];
+  }, [expenseCategoryStructure, expenseParentSlug]);
 
   const tagOptions = useMemo(() => tags, [tags]);
 
@@ -128,12 +199,12 @@ export function CreateTransactionForm({
         size="sm"
         disabled={!hasAccounts}
       >
-        {isOpen ? "Cancel" : "Add transaction"}
+        {isOpen ? t("transactions.toggle.close") : t("transactions.toggle.open")}
       </Button>
 
       {!hasAccounts ? (
         <p className="text-sm text-muted-foreground" role="status">
-          Create an account before recording transactions.
+          {t("transactions.noAccounts")}
         </p>
       ) : null}
 
@@ -144,20 +215,27 @@ export function CreateTransactionForm({
           className="w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[26rem]"
         >
           <div className="space-y-2">
-            <Label htmlFor="transaction-type">Type</Label>
+            <Label htmlFor="transaction-type">{t("transactions.field.type")}</Label>
             <select
               id="transaction-type"
               name="type"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className={SELECT_BASE_CLASSES}
               value={transactionType}
-              onChange={(event) =>
-                setTransactionType(event.target.value as TransactionType)
-              }
+              onChange={(event) => {
+                const nextType = event.target.value as TransactionType;
+                setTransactionType(nextType);
+                setIncomeCategorySlug("");
+                setExpenseParentSlug("");
+                setExpenseChildSlug("");
+                setSelectedAccountId("");
+                setTransferFromId("");
+                setTransferToId("");
+              }}
               required
             >
               {TYPE_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
-                  {option.label}
+                  {t(option.labelKey)}
                 </option>
               ))}
             </select>
@@ -166,78 +244,184 @@ export function CreateTransactionForm({
           {transactionType === "transfer" ? (
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="from-account">From account</Label>
+                <Label htmlFor="from-account">{t("transactions.field.fromAccount")}</Label>
                 <select
                   id="from-account"
                   name="fromAccountId"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue=""
+                  className={SELECT_BASE_CLASSES}
+                  value={transferFromId}
+                  onChange={(event) => setTransferFromId(event.target.value)}
                   required
                 >
                   <option value="" disabled>
-                    Select source account
+                    {t("transactions.field.selectSource")}
                   </option>
-                  {accounts.map((account) => (
+                  {decoratedAccountOptions
+                    .filter((account) => account.id !== transferToId)
+                    .map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name}
+                      {account.label}
                     </option>
-                  ))}
+                    ))}
                 </select>
+                <p className="text-xs text-muted-foreground">
+                  {transferFromAccount
+                    ? t("transactions.transfer.fromBalance", {
+                        balance: formatCurrency(
+                          transferFromAccount.currentBalanceMinor,
+                          transferFromAccount.currency ?? DEFAULT_CURRENCY,
+                        ),
+                      })
+                    : t("transactions.transfer.balance.placeholder")}
+                </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="to-account">To account</Label>
+                <Label htmlFor="to-account">{t("transactions.field.toAccount")}</Label>
                 <select
                   id="to-account"
                   name="toAccountId"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue=""
+                  className={SELECT_BASE_CLASSES}
+                  value={transferToId}
+                  onChange={(event) => setTransferToId(event.target.value)}
                   required
                 >
                   <option value="" disabled>
-                    Select destination account
+                    {t("transactions.field.selectDestination")}
                   </option>
-                  {accounts.map((account) => (
+                  {decoratedAccountOptions
+                    .filter((account) => account.id !== transferFromId)
+                    .map((account) => (
                     <option key={account.id} value={account.id}>
-                      {account.name}
+                      {account.label}
                     </option>
-                  ))}
+                    ))}
                 </select>
+                <p className="text-xs text-muted-foreground">
+                  {transferToAccount
+                    ? t("transactions.transfer.toBalance", {
+                        balance: formatCurrency(
+                          transferToAccount.currentBalanceMinor,
+                          transferToAccount.currency ?? DEFAULT_CURRENCY,
+                        ),
+                      })
+                    : t("transactions.transfer.balance.placeholder")}
+                </p>
               </div>
             </div>
           ) : (
             <div className="space-y-2">
-              <Label htmlFor="transaction-account">Account</Label>
+              <Label htmlFor="transaction-account">{t("transactions.field.account")}</Label>
               <select
                 id="transaction-account"
                 name="accountId"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                defaultValue=""
+                className={SELECT_BASE_CLASSES}
+                value={selectedAccountId}
+                onChange={(event) => setSelectedAccountId(event.target.value)}
                 required
               >
                 <option value="" disabled>
-                  Select an account
+                  {t("transactions.field.selectAccount")}
                 </option>
-                {accounts.map((account) => (
+                {decoratedAccountOptions.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {account.label}
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-muted-foreground">
+                {selectedAccount
+                  ? t("transactions.account.balance", {
+                      balance: formatCurrency(
+                        selectedAccount.currentBalanceMinor,
+                        selectedAccount.currency ?? DEFAULT_CURRENCY,
+                      ),
+                    })
+                  : t("transactions.account.balance.placeholder")}
+              </p>
             </div>
           )}
 
-          {transactionType !== "transfer" ? (
+          {transactionType === "expense" ? (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="transaction-expense-category">
+                  {t("transactions.field.expenseCategory")}
+                </Label>
+                <select
+                  id="transaction-expense-category"
+                  name="expenseCategorySlug"
+                  className={SELECT_BASE_CLASSES}
+                  value={expenseParentSlug}
+                  onChange={(event) => {
+                    const nextParent = event.target.value;
+                    setExpenseParentSlug(nextParent);
+                    if (!nextParent) {
+                      setExpenseChildSlug("");
+                      return;
+                    }
+                    const children = expenseCategoryStructure.children.get(nextParent) ?? [];
+                    const generalChild = children.find((child) => child.slug === "general");
+                    setExpenseChildSlug(generalChild ? generalChild.slug : "");
+                  }}
+                >
+                  <option value="">{t("transactions.field.uncategorized")}</option>
+                  {expenseCategoryStructure.parents.map((option) => (
+                    <option key={option.slug} value={option.slug}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t("transactions.field.expenseCategory.help")}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="transaction-expense-subcategory">
+                  {t("transactions.field.expenseSubcategory")}
+                </Label>
+                <select
+                  id="transaction-expense-subcategory"
+                  name="expenseSubcategorySlug"
+                  className={SELECT_BASE_CLASSES}
+                  value={expenseChildSlug}
+                  onChange={(event) => setExpenseChildSlug(event.target.value)}
+                  disabled={!expenseParentSlug || currentExpenseChildren.length === 0}
+                >
+                  <option value="" disabled>
+                    {expenseParentSlug
+                      ? currentExpenseChildren.length > 0
+                        ? t("transactions.field.expenseSubcategory.choose")
+                        : t("transactions.field.expenseSubcategory.none")
+                      : t("transactions.field.expenseSubcategory.selectCategory")}
+                  </option>
+                  {currentExpenseChildren.map((child) => (
+                    <option key={child.slug} value={child.slug}>
+                      {child.label}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {t("transactions.field.expenseSubcategory.help")}
+                </p>
+              </div>
+            </>
+          ) : null}
+
+          {transactionType === "income" ? (
             <div className="space-y-2">
-              <Label htmlFor="transaction-category">Category</Label>
+              <Label htmlFor="transaction-income-category">
+                {t("transactions.field.incomeCategory")}
+              </Label>
               <select
-                id="transaction-category"
-                name="categoryId"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                defaultValue=""
+                id="transaction-income-category"
+                name="incomeCategorySlug"
+                className={SELECT_BASE_CLASSES}
+                value={incomeCategorySlug}
+                onChange={(event) => setIncomeCategorySlug(event.target.value)}
               >
-                <option value="">Uncategorized</option>
-                {categoryOptions.map((option) => (
-                  <option key={option.id} value={option.id}>
+                <option value="">{t("transactions.field.uncategorized")}</option>
+                {incomeCategoryOptions.map((option) => (
+                  <option key={option.slug} value={option.slug}>
                     {option.label}
                   </option>
                 ))}
@@ -246,7 +430,7 @@ export function CreateTransactionForm({
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="transaction-amount">Amount</Label>
+            <Label htmlFor="transaction-amount">{t("transactions.field.amount")}</Label>
             <Input
               id="transaction-amount"
               name="amount"
@@ -258,12 +442,12 @@ export function CreateTransactionForm({
               required
             />
             <p className="text-xs text-muted-foreground">
-              Money values convert to minor units when saved.
+              {t("transactions.field.amount.tip")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="transaction-occurred">Occurred on</Label>
+            <Label htmlFor="transaction-occurred">{t("transactions.field.occurredAt")}</Label>
             <Input
               id="transaction-occurred"
               name="occurredAt"
@@ -274,51 +458,23 @@ export function CreateTransactionForm({
           </div>
 
           {transactionType !== "transfer" ? (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="transaction-payee">Payee</Label>
-                <select
-                  id="transaction-payee"
-                  name="payeeId"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                  defaultValue=""
-                >
-                  <option value="">No payee</option>
-                  {payees.map((payee) => (
-                    <option key={payee.id} value={payee.id}>
-                      {payee.name}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  id="transaction-new-payee"
-                  name="newPayee"
-                  placeholder="Add new payee"
-                  className="mt-2"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Provide a new payee name to create it on the fly.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="transaction-tags">Tags</Label>
-                <TransactionTagInput key={tagResetKey} name="tagIds" options={tagOptions} />
-              </div>
-            </>
+            <div className="space-y-2">
+              <Label htmlFor="transaction-tags">{t("transactions.field.tags")}</Label>
+              <TransactionTagInput key={tagResetKey} name="tagIds" options={tagOptions} />
+            </div>
           ) : null}
 
           <div className="space-y-2">
-            <Label htmlFor="transaction-description">Description</Label>
+            <Label htmlFor="transaction-description">{t("transactions.field.description")}</Label>
             <Input
               id="transaction-description"
               name="description"
-              placeholder="Optional memo"
+              placeholder={t("transactions.field.description.placeholder")}
             />
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button type="submit">Save transaction</Button>
+            <Button type="submit">{t("transactions.save")}</Button>
           </div>
         </form>
       ) : null}

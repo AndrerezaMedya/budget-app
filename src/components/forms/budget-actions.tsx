@@ -1,42 +1,69 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useFormState } from "react-dom";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
 import { deleteBudgetAction, updateBudgetAction } from "@/actions/budgets";
 import { initialActionState } from "@/actions/types";
+import { listPredefinedCategoriesByType } from "@/config/category-definitions";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { CategoryWithParent } from "@/lib/supabase/queries/categories";
 import type { BudgetWithSummary } from "@/lib/supabase/queries/budgets";
+import { useI18n } from "@/components/providers/i18n-provider";
 
 interface BudgetActionsProps {
   budget: BudgetWithSummary;
-  categories: CategoryWithParent[];
 }
 
 function toInputAmount(value: number): string {
   return (value / 100).toFixed(2);
 }
 
-export function BudgetActions({ budget, categories }: BudgetActionsProps) {
+export function BudgetActions({ budget }: BudgetActionsProps) {
   const [isEditing, setIsEditing] = useState(false);
-  const [editState, editAction] = useFormState(updateBudgetAction, initialActionState);
-  const [deleteState, deleteAction] = useFormState(deleteBudgetAction, initialActionState);
+  const [editState, editAction] = useActionState(updateBudgetAction, initialActionState);
+  const [deleteState, deleteAction] = useActionState(deleteBudgetAction, initialActionState);
   const { toast } = useToast();
   const editStatusRef = useRef(editState.status);
   const deleteStatusRef = useRef(deleteState.status);
+  const { t } = useI18n();
 
   const categoryOptions = useMemo(() => {
-    return categories.map((category) => ({
-      id: category.id,
-      label: category.parentName
-        ? `${category.parentName} • ${category.name}`
-        : category.name,
+    const translateKey = (key: string | null, fallback: string) =>
+      key ? t(key as Parameters<typeof t>[0]) : fallback;
+
+    return listPredefinedCategoriesByType("expense").map((category) => ({
+      value: category.slug,
+      label: translateKey(category.nameKey, category.name),
     }));
-  }, [categories]);
+  }, [t]);
+
+  const selectionValue = useMemo(() => {
+    if (budget.categorySlug) {
+      if (budget.subcategorySlug) {
+        return `${budget.categorySlug}::${budget.subcategorySlug}`;
+      }
+      return budget.categorySlug;
+    }
+    return budget.categoryId;
+  }, [budget.categorySlug, budget.subcategorySlug, budget.categoryId]);
+
+  const resolvedCategoryOptions = useMemo(() => {
+    if (!selectionValue) {
+      return categoryOptions;
+    }
+
+    if (selectionValue && categoryOptions.some((option) => option.value === selectionValue)) {
+      return categoryOptions;
+    }
+
+    if (selectionValue) {
+      return [{ value: selectionValue, label: budget.categoryName }, ...categoryOptions];
+    }
+
+    return categoryOptions;
+  }, [categoryOptions, selectionValue, budget.categoryName]);
 
   useEffect(() => {
     if (editState.status === editStatusRef.current) {
@@ -46,7 +73,7 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
 
     if (editState.status === "success") {
       toast({
-        title: "Budget updated",
+        title: t("budgets.toast.update.success.title"),
         description: editState.message,
         variant: "success",
       });
@@ -56,12 +83,12 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
 
     if (editState.status === "error") {
       toast({
-        title: "Unable to update budget",
+        title: t("budgets.toast.update.error.title"),
         description: editState.message,
         variant: "error",
       });
     }
-  }, [editState.status, editState.message, toast]);
+  }, [editState.status, editState.message, toast, t]);
 
   useEffect(() => {
     if (deleteState.status === deleteStatusRef.current) {
@@ -71,7 +98,7 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
 
     if (deleteState.status === "success") {
       toast({
-        title: "Budget removed",
+        title: t("budgets.toast.delete.success.title"),
         description: deleteState.message,
         variant: "success",
       });
@@ -79,16 +106,16 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
 
     if (deleteState.status === "error") {
       toast({
-        title: "Unable to remove budget",
+        title: t("budgets.toast.delete.error.title"),
         description: deleteState.message,
         variant: "error",
       });
     }
-  }, [deleteState.status, deleteState.message, toast]);
+  }, [deleteState.status, deleteState.message, toast, t]);
 
   const handleDeleteSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     const confirmed = window.confirm(
-      `Remove the budget for ${budget.categoryName}? Historical summaries remain intact.`,
+      t("budgets.actions.confirmDelete", { category: budget.categoryName }),
     );
     if (!confirmed) {
       event.preventDefault();
@@ -104,16 +131,18 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
         >
           <input type="hidden" name="budgetId" value={budget.id} />
           <div className="space-y-1">
-            <Label htmlFor={`budget-edit-category-${budget.id}`}>Category</Label>
+            <Label htmlFor={`budget-edit-category-${budget.id}`}>
+              {t("budgets.form.category")}
+            </Label>
             <select
               id={`budget-edit-category-${budget.id}`}
-              name="categoryId"
+              name="categorySelection"
               className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              defaultValue={budget.categoryId}
+              defaultValue={selectionValue}
               required
             >
-              {categoryOptions.map((option) => (
-                <option key={option.id} value={option.id}>
+              {resolvedCategoryOptions.map((option) => (
+                <option key={option.value} value={option.value}>
                   {option.label}
                 </option>
               ))}
@@ -121,7 +150,9 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-1">
-              <Label htmlFor={`budget-edit-amount-${budget.id}`}>Amount</Label>
+              <Label htmlFor={`budget-edit-amount-${budget.id}`}>
+                {t("budgets.form.amount")}
+              </Label>
               <Input
                 id={`budget-edit-amount-${budget.id}`}
                 name="amount"
@@ -134,7 +165,9 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
               />
             </div>
             <div className="space-y-1">
-              <Label htmlFor={`budget-edit-period-${budget.id}`}>Period</Label>
+              <Label htmlFor={`budget-edit-period-${budget.id}`}>
+                {t("budgets.form.period")}
+              </Label>
               <Input
                 id={`budget-edit-period-${budget.id}`}
                 name="period"
@@ -153,27 +186,27 @@ export function BudgetActions({ budget, categories }: BudgetActionsProps) {
               defaultChecked={budget.rollover}
             />
             <Label htmlFor={`budget-edit-rollover-${budget.id}`} className="text-sm font-normal">
-              Enable rollover
+              {t("budgets.form.rollover")}
             </Label>
           </div>
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button type="button" variant="ghost" size="sm" onClick={() => setIsEditing(false)}>
-              Cancel
+              {t("budgets.toggle.close")}
             </Button>
             <Button type="submit" size="sm">
-              Save changes
+              {t("budgets.actions.saveChanges")}
             </Button>
           </div>
         </form>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-            Edit
+            {t("budgets.actions.edit")}
           </Button>
           <form action={deleteAction} onSubmit={handleDeleteSubmit}>
             <input type="hidden" name="budgetId" value={budget.id} />
             <Button type="submit" variant="destructive" size="sm">
-              Remove
+              {t("budgets.actions.remove")}
             </Button>
           </form>
         </div>
