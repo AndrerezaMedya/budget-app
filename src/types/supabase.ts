@@ -235,6 +235,7 @@ export type Database = {
           default_currency: string;
           full_name: string | null;
           id: string;
+          locale: string;
           time_zone: string;
           updated_at: string;
         };
@@ -243,6 +244,7 @@ export type Database = {
           default_currency?: string;
           full_name?: string | null;
           id: string;
+          locale?: string;
           time_zone?: string;
           updated_at?: string;
         };
@@ -251,6 +253,7 @@ export type Database = {
           default_currency?: string;
           full_name?: string | null;
           id?: string;
+          locale?: string;
           time_zone?: string;
           updated_at?: string;
         };
