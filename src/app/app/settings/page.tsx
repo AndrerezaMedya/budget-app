@@ -24,11 +24,11 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>Timezone</CardTitle>
             <CardDescription>
-              Summaries use the user-selected timezone for month boundaries.
+              Workspace timezone is fixed to UTC+7 (Asia/Jakarta).
             </CardDescription>
           </CardHeader>
           <CardContent className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Settings form coming soon. Persist preferences in `profiles` table.
+            Settings form coming soon. Store overrides in the `profiles` table if you need a different offset.
           </CardContent>
         </Card>
         <Card>
@@ -50,7 +50,7 @@ export default async function SettingsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <CreateCategoryForm categories={categories} />
+            <CreateCategoryForm />
             {categories.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
                 No categories yet. Use the form above to add your first one.

@@ -19,7 +19,6 @@ export async function createCategoryAction(
   }
 
   const name = (formData.get("name") as string | null)?.trim();
-  const parentId = (formData.get("parentId") as string | null)?.trim() || null;
   const icon = (formData.get("icon") as string | null)?.trim() || null;
   const color = (formData.get("color") as string | null)?.trim() || null;
 
@@ -27,31 +26,10 @@ export async function createCategoryAction(
     return { status: "error", message: "Category name is required." };
   }
 
-  if (parentId === "") {
-    return { status: "error", message: "Invalid parent category." };
-  }
-
-  if (parentId) {
-    const { data: parent, error: parentError } = await supabase
-      .from("categories")
-      .select("id")
-      .eq("id", parentId)
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (parentError) {
-      return { status: "error", message: parentError.message };
-    }
-
-    if (!parent) {
-      return { status: "error", message: "Parent category not found." };
-    }
-  }
-
   const { error } = await supabase.from("categories").insert({
     user_id: user.id,
     name,
-    parent_id: parentId,
+    parent_id: null,
     icon: icon || null,
     color: color || null,
   });

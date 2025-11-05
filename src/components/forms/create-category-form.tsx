@@ -1,21 +1,34 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFormState } from "react-dom";
 
 import { createCategoryAction } from "@/actions/categories";
 import { initialActionState } from "@/actions/types";
-import type { CategoryWithParent } from "@/lib/supabase/queries/categories";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-interface CreateCategoryFormProps {
-  categories: CategoryWithParent[];
-}
+const ICON_OPTIONS = [
+  { value: "lucide:piggy-bank", label: "Income" },
+  { value: "lucide:shopping-cart", label: "Groceries" },
+  { value: "lucide:bus", label: "Transport" },
+  { value: "lucide:utensils", label: "Dining" },
+  { value: "lucide:home", label: "Housing" },
+  { value: "lucide:activity", label: "Wellness" },
+];
 
-export function CreateCategoryForm({ categories }: CreateCategoryFormProps) {
+const COLOR_OPTIONS = [
+  { value: "", label: "Default" },
+  { value: "#2563eb", label: "Blue" },
+  { value: "#16a34a", label: "Green" },
+  { value: "#d97706", label: "Amber" },
+  { value: "#dc2626", label: "Red" },
+  { value: "#7c3aed", label: "Indigo" },
+];
+
+export function CreateCategoryForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [state, formAction] = useFormState(createCategoryAction, initialActionState);
@@ -51,18 +64,6 @@ export function CreateCategoryForm({ categories }: CreateCategoryFormProps) {
       });
     }
   }, [state.status, state.message, toast]);
-
-  const parentOptions = useMemo(() => {
-    return categories.map((category) => {
-      if (category.parentName) {
-        return {
-          id: category.id,
-          label: `${category.parentName} • ${category.name}`,
-        };
-      }
-      return { id: category.id, label: category.name };
-    });
-  }, [categories]);
 
   const toggle = () => {
     setIsOpen((prev) => {
@@ -103,40 +104,42 @@ export function CreateCategoryForm({ categories }: CreateCategoryFormProps) {
             />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="category-parent">Parent (optional)</Label>
-            <select
-              id="category-parent"
-              name="parentId"
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-              defaultValue=""
-            >
-              <option value="">No parent</option>
-              {parentOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="category-icon">Icon (optional)</Label>
-              <Input
+              <Label htmlFor="category-icon">Icon</Label>
+              <select
                 id="category-icon"
                 name="icon"
-                placeholder="lucide:shopping-cart"
-              />
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                defaultValue=""
+              >
+                <option value="">No icon</option>
+                {ICON_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="category-color">Color (optional)</Label>
-              <Input id="category-color" name="color" placeholder="#2563eb" />
+              <Label htmlFor="category-color">Color</Label>
+              <select
+                id="category-color"
+                name="color"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                defaultValue=""
+              >
+                {COLOR_OPTIONS.map((option) => (
+                  <option key={option.value || "default"} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
           <div className="space-y-2 text-xs text-muted-foreground">
-            <p>Parent categories help organise reports and budgets into groups.</p>
+            <p>Pick an icon and color to keep reports easy to scan.</p>
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
