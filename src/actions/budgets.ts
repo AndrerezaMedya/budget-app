@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
+import { ensurePredefinedCategoryExists } from "@/actions/categories";
 
 import type { ActionState } from "@/actions/types";
 
@@ -18,6 +19,22 @@ function parseAmount(value: FormDataEntryValue | null): number | null {
   return Math.round(numeric * 100);
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89abAB][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+function isUuid(value: string | null): value is string {
+  return !!value && UUID_PATTERN.test(value);
+}
+
+function parseCategorySelection(selection: string) {
+  const [categorySlug, subcategorySlug] = selection.split("::");
+  const trimmedCategory = categorySlug?.trim() ?? "";
+  const trimmedSubcategory = subcategorySlug?.trim() ?? "";
+  return {
+    categorySlug: trimmedCategory,
+    subcategorySlug: trimmedSubcategory.length > 0 ? trimmedSubcategory : null,
+  };
+}
+
 export async function createBudgetAction(
   _prev: ActionState,
   formData: FormData,
@@ -31,17 +48,53 @@ export async function createBudgetAction(
     return { status: "error", message: "You must be signed in." };
   }
 
-  const categoryId = formData.get("categoryId") as string | null;
+  const categorySelection = (formData.get("categorySelection") as string | null)?.trim() ?? "";
   const amountMinor = parseAmount(formData.get("amount"));
   const rollover = formData.get("rollover") === "on";
   const period = (formData.get("period") as string | null) ?? currentPeriodKey();
 
-  if (!categoryId) {
+  if (!categorySelection) {
     return { status: "error", message: "Select a category." };
   }
 
   if (amountMinor === null) {
     return { status: "error", message: "Enter a budget amount." };
+  }
+
+  let categoryId: string | null = null;
+  let shouldRevalidateCategories = false;
+
+  if (isUuid(categorySelection)) {
+    categoryId = categorySelection;
+  } else {
+    const { categorySlug, subcategorySlug } = parseCategorySelection(categorySelection);
+
+    if (!categorySlug) {
+      return { status: "error", message: "Select a category." };
+    }
+
+    try {
+      const ensured = await ensurePredefinedCategoryExists({
+        supabase,
+        userId: user.id,
+        type: "expense",
+        categorySlug,
+        subcategorySlug,
+      });
+
+      categoryId = subcategorySlug ? ensured.childId : ensured.parentId;
+
+      if (!categoryId) {
+        return { status: "error", message: "Unable to resolve category." };
+      }
+
+      if (ensured.parentCreated || ensured.childCreated) {
+        shouldRevalidateCategories = true;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to resolve category.";
+      return { status: "error", message };
+    }
   }
 
   const { error } = await supabase.from("budgets").insert({
@@ -59,6 +112,9 @@ export async function createBudgetAction(
   revalidatePath("/app/budgets");
   revalidatePath("/app/overview");
   revalidatePath("/app/reports");
+  if (shouldRevalidateCategories) {
+    revalidatePath("/app/settings");
+  }
 
   return { status: "success", message: "Budget created." };
 }
@@ -77,7 +133,7 @@ export async function updateBudgetAction(
   }
 
   const budgetId = (formData.get("budgetId") as string | null)?.trim();
-  const categoryId = (formData.get("categoryId") as string | null)?.trim();
+  const categorySelection = (formData.get("categorySelection") as string | null)?.trim() ?? "";
   const amountMinor = parseAmount(formData.get("amount"));
   const rollover = formData.get("rollover") === "on";
   const period = (formData.get("period") as string | null)?.trim() ?? currentPeriodKey();
@@ -86,12 +142,48 @@ export async function updateBudgetAction(
     return { status: "error", message: "Missing budget identifier." };
   }
 
-  if (!categoryId) {
+  if (!categorySelection) {
     return { status: "error", message: "Select a category." };
   }
 
   if (amountMinor === null) {
     return { status: "error", message: "Enter a budget amount." };
+  }
+
+  let categoryId: string | null = null;
+  let shouldRevalidateCategories = false;
+
+  if (isUuid(categorySelection)) {
+    categoryId = categorySelection;
+  } else {
+    const { categorySlug, subcategorySlug } = parseCategorySelection(categorySelection);
+
+    if (!categorySlug) {
+      return { status: "error", message: "Select a category." };
+    }
+
+    try {
+      const ensured = await ensurePredefinedCategoryExists({
+        supabase,
+        userId: user.id,
+        type: "expense",
+        categorySlug,
+        subcategorySlug,
+      });
+
+      categoryId = subcategorySlug ? ensured.childId : ensured.parentId;
+
+      if (!categoryId) {
+        return { status: "error", message: "Unable to resolve category." };
+      }
+
+      if (ensured.parentCreated || ensured.childCreated) {
+        shouldRevalidateCategories = true;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to resolve category.";
+      return { status: "error", message };
+    }
   }
 
   const { error } = await supabase
@@ -112,6 +204,9 @@ export async function updateBudgetAction(
   revalidatePath("/app/budgets");
   revalidatePath("/app/overview");
   revalidatePath("/app/reports");
+  if (shouldRevalidateCategories) {
+    revalidatePath("/app/settings");
+  }
 
   return { status: "success", message: "Budget updated." };
 }
