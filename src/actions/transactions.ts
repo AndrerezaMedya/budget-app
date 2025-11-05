@@ -52,6 +52,13 @@ export async function createTransactionAction(
   const amountMinor = parseAmount(formData.get("amount"));
   const occurredAt = parseDate(formData.get("occurredAt"));
   const description = (formData.get("description") as string | null)?.trim() ?? null;
+  const tagField = (formData.get("tagIds") as string | null)?.trim() ?? "";
+  const incomingTagValues = tagField
+    ? tagField.split(",").map((value) => value.trim())
+    : [];
+  const tagIds = Array.from(new Set(incomingTagValues.filter((value) => value.length > 0)));
+  const newPayeeName = (formData.get("newPayee") as string | null)?.trim() ?? null;
+  let payeeId = (formData.get("payeeId") as string | null)?.trim() ?? null;
 
   if (!type || !SUPPORTED_TYPES.includes(type)) {
     return { status: "error", message: "Select a valid transaction type." };
@@ -77,7 +84,7 @@ export async function createTransactionAction(
       return { status: "error", message: "Accounts must be different for transfers." };
     }
 
-  const transferGroupId = randomUUID();
+    const transferGroupId = randomUUID();
     const rows: Database["public"]["Tables"]["transactions"]["Insert"][] = [
       {
         user_id: user.id,
@@ -125,25 +132,73 @@ export async function createTransactionAction(
 
   const categoryId = (formData.get("categoryId") as string | null) ?? null;
 
-  const { error } = await supabase.from("transactions").insert({
-    user_id: user.id,
-    account_id: accountId,
-    category_id: categoryId || null,
-    type,
-    amount_minor: amountMinor,
-    currency: ACCOUNT_CURRENCY,
-    occurred_at: occurredAt,
-    booked_at: occurredAt,
-    description,
-  });
+  if (newPayeeName && payeeId) {
+    return {
+      status: "error",
+      message: "Choose an existing payee or enter a new one, not both.",
+    };
+  }
+
+  if (newPayeeName && !payeeId) {
+    const { data: payeeInsert, error: payeeError } = await supabase
+      .from("payees")
+      .insert({
+        user_id: user.id,
+        name: newPayeeName,
+      })
+      .select("id")
+      .single();
+
+    if (payeeError) {
+      return { status: "error", message: payeeError.message };
+    }
+
+    payeeId = payeeInsert?.id ?? null;
+  }
+
+  const { data: transactionInsert, error } = await supabase
+    .from("transactions")
+    .insert({
+      user_id: user.id,
+      account_id: accountId,
+      category_id: categoryId || null,
+      payee_id: payeeId || null,
+      type,
+      amount_minor: amountMinor,
+      currency: ACCOUNT_CURRENCY,
+      occurred_at: occurredAt,
+      booked_at: occurredAt,
+      description,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     return { status: "error", message: error.message };
   }
 
+  const insertedId = transactionInsert?.id;
+
+  if (insertedId && tagIds.length > 0) {
+    const tagRows = tagIds.map((tagId) => ({
+      transaction_id: insertedId,
+      tag_id: tagId,
+    }));
+
+    const { error: tagError } = await supabase.from("transaction_tags").insert(tagRows);
+
+    if (tagError) {
+      await supabase.from("transactions").delete().eq("id", insertedId);
+      return { status: "error", message: tagError.message };
+    }
+  }
+
   revalidatePath("/app/transactions");
   revalidatePath("/app/overview");
   revalidatePath("/app/budgets");
+  if (newPayeeName) {
+    revalidatePath("/app/settings");
+  }
 
   return { status: "success", message: "Transaction added." };
 }
