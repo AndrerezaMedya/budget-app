@@ -1,6 +1,6 @@
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchBudgetsWithSummary } from "@/lib/supabase/queries/budgets";
-import { fetchRecentTransactions } from "@/lib/supabase/queries/transactions";
+import { fetchRecentTransactions, fetchTransactionSummary } from "@/lib/supabase/queries/transactions";
 
 function currentPeriodKey(date = new Date()): string {
   const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -12,6 +12,7 @@ export type OverviewSnapshot = {
   totalIncomeMinor: number;
   totalExpenseMinor: number;
   netCashflowMinor: number;
+  totalAccountBalanceMinorIdr: number;
   averageExpensePerDayMinor: number;
   activeAccounts: number;
   activeBudgets: number;
@@ -21,23 +22,27 @@ export type OverviewSnapshot = {
 
 export async function fetchOverviewSnapshot(): Promise<OverviewSnapshot> {
   const period = currentPeriodKey();
-  const [accountsResult, budgets] = await Promise.all([
+  const periodStart = new Date();
+  periodStart.setUTCDate(1);
+  periodStart.setUTCHours(0, 0, 0, 0);
+  const periodEnd = new Date(periodStart);
+  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+
+  const [accountsResult, budgets, transactionSummary] = await Promise.all([
     fetchAccounts(),
     fetchBudgetsWithSummary(period),
+    fetchTransactionSummary({
+      startDate: periodStart.toISOString(),
+      endDate: periodEnd.toISOString(),
+    }),
   ]);
 
   const activeAccounts = accountsResult.accounts.filter(
     (account) => !account.archived_at,
   );
 
-  const totalIncomeMinor = budgets.reduce(
-    (sum, budget) => sum + budget.incomeMinor,
-    0,
-  );
-  const totalExpenseMinor = budgets.reduce(
-    (sum, budget) => sum + budget.spentMinor,
-    0,
-  );
+  const totalIncomeMinor = transactionSummary.totalIncomeMinor;
+  const totalExpenseMinor = transactionSummary.totalExpenseMinor;
   const netCashflowMinor = totalIncomeMinor - totalExpenseMinor;
 
   const nearingLimitBudgets = budgets.filter((budget) => {
@@ -58,6 +63,7 @@ export async function fetchOverviewSnapshot(): Promise<OverviewSnapshot> {
     totalIncomeMinor,
     totalExpenseMinor,
     netCashflowMinor,
+  totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
     averageExpensePerDayMinor,
     activeAccounts: activeAccounts.length,
     activeBudgets: budgets.length,
