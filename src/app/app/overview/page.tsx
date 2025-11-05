@@ -1,5 +1,7 @@
-import { ArrowUpRight, Banknote, CalendarDays } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
+import { formatCurrency } from "@/lib/format";
+import { fetchOverviewSnapshot } from "@/lib/supabase/queries/overview";
 import {
   Card,
   CardContent,
@@ -8,75 +10,88 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-const KPI_CARDS = [
-  {
-    title: "Net cashflow",
-    description: "This month vs last month",
-    value: "+Rp 4.250.000",
-    trend: { label: "↑ 12% vs last month", icon: ArrowUpRight },
-  },
-  {
-    title: "Spend velocity",
-    description: "Average daily expense",
-    value: "Rp 310.000 / day",
-    trend: { label: "Within budget", icon: CalendarDays },
-  },
-  {
-    title: "Budget burn",
-    description: "Categories over 80% allocation",
-    value: "2 categories",
-    trend: { label: "Review groceries & transport", icon: Banknote },
-  },
-];
+function formatDailySpend(amountMinor: number) {
+  if (amountMinor === 0) return "Rp 0 / day";
+  return `${formatCurrency(amountMinor)} / day`;
+}
 
-export default function OverviewPage() {
+export default async function OverviewPage() {
+  const snapshot = await fetchOverviewSnapshot();
+
+  const metrics = [
+    {
+      title: "Net cashflow",
+      description: `Period ${snapshot.period}`,
+      value: formatCurrency(snapshot.netCashflowMinor),
+      footnote: `Income ${formatCurrency(snapshot.totalIncomeMinor)} vs expense ${formatCurrency(snapshot.totalExpenseMinor)}`,
+    },
+    {
+      title: "Spend velocity",
+      description: "Average daily expense",
+      value: formatDailySpend(snapshot.averageExpensePerDayMinor),
+      footnote: `${snapshot.recentTransactions} recent transactions captured`,
+    },
+    {
+      title: "Budget burn",
+      description: "Budgets nearing limit (≥80%)",
+      value: `${snapshot.nearingLimitBudgets}`,
+      footnote: `${snapshot.activeBudgets} active budgets this month`,
+    },
+  ];
+
   return (
     <div className="space-y-6">
-      <div>
+      <header>
         <h1 className="text-2xl font-semibold">Overview</h1>
         <p className="text-sm text-muted-foreground">
-          Materialized summaries keep dashboards live as transactions sync.
+          Snapshot of Supabase-backed metrics for the current budgeting period.
         </p>
-      </div>
+      </header>
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {KPI_CARDS.map((card) => (
-          <Card key={card.title}>
+        {metrics.map((metric) => (
+          <Card key={metric.title}>
             <CardHeader className="flex flex-row items-start justify-between">
               <div>
                 <CardTitle className="text-sm font-medium">
-                  {card.title}
+                  {metric.title}
                 </CardTitle>
-                <CardDescription>{card.description}</CardDescription>
+                <CardDescription>{metric.description}</CardDescription>
               </div>
-              <card.trend.icon className="size-5 text-muted-foreground" />
+              <TrendingUp className="size-5 text-muted-foreground" aria-hidden="true" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-semibold">{card.value}</div>
+              <div className="text-2xl font-semibold">{metric.value}</div>
               <p className="mt-2 text-sm text-muted-foreground">
-                {card.trend.label}
+                {metric.footnote}
               </p>
             </CardContent>
           </Card>
         ))}
       </section>
+
       <section className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Expense timeline</CardTitle>
+            <CardTitle>Active accounts</CardTitle>
             <CardDescription>
-              Coming soon: line chart fed by account_daily summaries.
+              Currently tracking {snapshot.activeAccounts} accounts in Supabase.
             </CardDescription>
           </CardHeader>
-          <CardContent className="h-64 w-full rounded-lg border border-dashed border-border bg-muted/30" />
+          <CardContent className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
+            Time-series charts wire in once account_daily summaries are hydrated.
+          </CardContent>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Category split</CardTitle>
+            <CardTitle>Budgets overview</CardTitle>
             <CardDescription>
-              Coming soon: donut chart driven by category_monthly docs.
+              {snapshot.activeBudgets} budgets monitored this period.
             </CardDescription>
           </CardHeader>
-          <CardContent className="h-64 w-full rounded-lg border border-dashed border-border bg-muted/30" />
+          <CardContent className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
+            Replace with donut/chart once category summaries feed visualization.
+          </CardContent>
         </Card>
       </section>
     </div>
