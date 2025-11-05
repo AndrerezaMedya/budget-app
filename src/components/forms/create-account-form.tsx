@@ -6,6 +6,7 @@ import { useFormState } from "react-dom";
 import { createAccountAction } from "@/actions/accounts";
 import { initialActionState } from "@/actions/types";
 import { ACCOUNT_TYPE_OPTIONS } from "@/config/accounts";
+import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,17 +15,38 @@ export function CreateAccountForm() {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [state, formAction] = useFormState(createAccountAction, initialActionState);
+  const { toast } = useToast();
+  const statusRef = useRef(state.status);
 
   useEffect(() => {
-    if (state.status !== "success") {
+    if (state.status === statusRef.current) {
       return;
     }
-    const frame = requestAnimationFrame(() => {
-      formRef.current?.reset();
-      setIsOpen(false);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [state.status]);
+
+    statusRef.current = state.status;
+
+    if (state.status === "success") {
+      toast({
+        title: "Account created",
+        description: state.message,
+        variant: "success",
+      });
+
+      const frame = requestAnimationFrame(() => {
+        formRef.current?.reset();
+        setIsOpen(false);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+
+    if (state.status === "error") {
+      toast({
+        title: "Unable to create account",
+        description: state.message,
+        variant: "error",
+      });
+    }
+  }, [state.status, state.message, toast]);
 
   const toggle = () => {
     setIsOpen((prev) => {
@@ -36,12 +58,15 @@ export function CreateAccountForm() {
   };
 
   return (
-    <div className="flex flex-col items-end gap-3">
+    <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
       <Button
         type="button"
         onClick={toggle}
-        className="inline-flex items-center gap-2"
+        className="inline-flex items-center gap-2 sm:w-auto"
         variant={isOpen ? "secondary" : "default"}
+        size="sm"
+        data-testid="create-account-toggle"
+        {...(isOpen ? { "aria-expanded": true } : {})}
       >
         {isOpen ? "Cancel" : "Add account"}
       </Button>
@@ -50,7 +75,7 @@ export function CreateAccountForm() {
         <form
           ref={formRef}
           action={formAction}
-          className="w-full min-w-[20rem] space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm"
+          className="w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[20rem]"
         >
           <div className="space-y-2">
             <Label htmlFor="account-name">Name</Label>
@@ -99,28 +124,10 @@ export function CreateAccountForm() {
             </p>
           </div>
 
-          <div className="flex items-center justify-between gap-2 pt-2">
+          <div className="flex items-center justify-end gap-2 pt-2">
             <Button type="submit">Save account</Button>
-            {state.message ? (
-              <p
-                className="text-sm"
-                role={state.status === "error" ? "alert" : undefined}
-              >
-                {state.message}
-              </p>
-            ) : null}
           </div>
         </form>
-      ) : null}
-
-      {state.status === "error" && !isOpen && state.message ? (
-        <p className="text-sm text-destructive" role="alert">
-          {state.message}
-        </p>
-      ) : null}
-
-      {state.status === "success" && !isOpen && state.message ? (
-        <p className="text-sm text-muted-foreground">{state.message}</p>
       ) : null}
     </div>
   );
