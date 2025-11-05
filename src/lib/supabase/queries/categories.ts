@@ -18,10 +18,7 @@ export async function fetchCategories(): Promise<CategoryWithParent[]> {
   const supabase = await createSupabaseServerComponentClient();
   const { data, error } = await supabase
     .from("categories")
-    .select(
-      `id, name, parent_id, created_at, updated_at, icon, color,
-        parent:categories!categories_parent_id_fkey ( id, name )`
-    )
+    .select("id, name, parent_id, created_at, updated_at, icon, color")
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
 
@@ -29,17 +26,17 @@ export async function fetchCategories(): Promise<CategoryWithParent[]> {
     throw new Error(`Failed to load categories: ${error.message}`);
   }
 
-  const rows = (data ?? []) as Array<
-    CategoryRow & {
-      parent: Array<Pick<CategoryRow, "id" | "name">>;
-    }
-  >;
+  const rows = (data ?? []) as CategoryRow[];
+  const nameLookup = new Map<string, string>();
+  rows.forEach((row) => {
+    nameLookup.set(row.id, row.name);
+  });
 
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
     parentId: row.parent_id,
-    parentName: row.parent[0]?.name ?? null,
+    parentName: row.parent_id ? nameLookup.get(row.parent_id) ?? null : null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     icon: row.icon,
