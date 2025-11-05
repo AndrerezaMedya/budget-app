@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { CreateCategoryForm } from "@/components/forms/create-category-form";
 
 export default async function SettingsPage() {
   const categories = await fetchCategories();
@@ -48,10 +49,11 @@ export default async function SettingsPage() {
               {categories.length} categories loaded from Supabase.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <CreateCategoryForm categories={categories} />
             {categories.length === 0 ? (
               <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No categories yet. Seed demo data or create categories with the upcoming CRUD forms.
+                No categories yet. Use the form above to add your first one.
               </div>
             ) : (
               <div className="overflow-hidden rounded-lg border border-border">
