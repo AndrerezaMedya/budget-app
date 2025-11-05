@@ -1,8 +1,9 @@
 import { Clock, Layers3, Wallet } from "lucide-react";
 
 import { formatCurrency, formatDate } from "@/lib/format";
+import { getTranslator } from "@/lib/i18n";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
-import type { Database } from "@/types/supabase";
+import { ACCOUNT_TYPE_LABEL_MAP } from "@/config/accounts";
 import {
   Card,
   CardContent,
@@ -14,26 +15,14 @@ import { Badge } from "@/components/ui/badge";
 import { AccountActions } from "@/components/forms/account-actions";
 import { CreateAccountForm } from "@/components/forms/create-account-form";
 
-const ACCOUNT_TYPE_LABEL: Record<
-  Database["public"]["Enums"]["account_type"],
-  string
-> = {
-  bank: "Bank account",
-  cash: "Cash wallet",
-  wallet: "Digital wallet",
-  credit: "Credit account",
-  investment: "Investment",
-  savings: "Savings account",
-  other: "Other",
-};
-
 export default async function AccountsPage() {
+  const { t } = await getTranslator();
   const { accounts } = await fetchAccounts();
   const activeAccounts = accounts.filter((account) => !account.archived_at);
   const archivedAccounts = accounts.filter((account) => account.archived_at);
 
-  const totalOpeningBalance = activeAccounts.reduce(
-    (sum, account) => sum + account.opening_balance_minor,
+  const totalCurrentBalance = activeAccounts.reduce(
+    (sum, account) => sum + account.current_balance_minor,
     0,
   );
 
@@ -41,10 +30,9 @@ export default async function AccountsPage() {
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Accounts</h1>
+          <h1 className="text-2xl font-semibold">{t("accounts.heading")}</h1>
           <p className="text-sm text-muted-foreground">
-            Accounts seed balance history and drive transfer pairing. Build out
-            the ledger here before wiring categories and budgets.
+            {t("accounts.subheading")}
           </p>
         </div>
         <CreateAccountForm />
@@ -54,47 +42,53 @@ export default async function AccountsPage() {
         <Card>
           <CardHeader className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-sm font-medium">Active accounts</CardTitle>
-              <CardDescription>Synced from Supabase</CardDescription>
+              <CardTitle className="text-sm font-medium">
+                {t("accounts.stats.active.title")}
+              </CardTitle>
+              <CardDescription>{t("accounts.stats.active.description")}</CardDescription>
             </div>
             <Wallet className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{activeAccounts.length}</p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Accounts with available balance in the workspace.
+              {t("accounts.stats.active.caption")}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-sm font-medium">Opening balance</CardTitle>
-              <CardDescription>Current sum (minor units)</CardDescription>
+              <CardTitle className="text-sm font-medium">
+                {t("accounts.stats.balance.title")}
+              </CardTitle>
+              <CardDescription>{t("accounts.stats.balance.description")}</CardDescription>
             </div>
             <Layers3 className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">
-              {formatCurrency(totalOpeningBalance)}
+              {formatCurrency(totalCurrentBalance)}
             </p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Based on `opening_balance_minor` values stored in Supabase.
+              {t("accounts.stats.balance.caption")}
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex items-start justify-between">
             <div>
-              <CardTitle className="text-sm font-medium">Archived accounts</CardTitle>
-              <CardDescription>Hidden from day-to-day use</CardDescription>
+              <CardTitle className="text-sm font-medium">
+                {t("accounts.stats.archived.title")}
+              </CardTitle>
+              <CardDescription>{t("accounts.stats.archived.description")}</CardDescription>
             </div>
             <Clock className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{archivedAccounts.length}</p>
             <p className="mt-2 text-xs text-muted-foreground">
-              Archived accounts keep historical ledger data intact.
+              {t("accounts.stats.archived.caption")}
             </p>
           </CardContent>
         </Card>
@@ -104,16 +98,16 @@ export default async function AccountsPage() {
         {accounts.length === 0 ? (
           <Card className="md:col-span-2 xl:col-span-3">
             <CardHeader>
-              <CardTitle>No accounts yet</CardTitle>
-              <CardDescription>
-                Seed data by running the Supabase seed function or manually add an
-                account once mutations are wired.
-              </CardDescription>
+              <CardTitle>{t("accounts.empty.title")}</CardTitle>
+              <CardDescription>{t("accounts.empty.description")}</CardDescription>
             </CardHeader>
           </Card>
         ) : (
           accounts.map((account) => {
-            const typeLabel = ACCOUNT_TYPE_LABEL[account.type] ?? "Account";
+            const typeLabel = t(
+              ACCOUNT_TYPE_LABEL_MAP[account.type] ?? "accounts.card.typeFallback",
+            );
+            const currentBalance = formatCurrency(account.current_balance_minor);
             const openingBalance = formatCurrency(account.opening_balance_minor);
             const createdAt = formatDate(account.created_at);
 
@@ -125,7 +119,7 @@ export default async function AccountsPage() {
                       {account.name}
                     </CardTitle>
                     {account.archived_at ? (
-                      <Badge variant="secondary">Archived</Badge>
+                      <Badge variant="secondary">{t("accounts.card.badge.archived")}</Badge>
                     ) : null}
                   </div>
                   <CardDescription>{typeLabel}</CardDescription>
@@ -133,21 +127,27 @@ export default async function AccountsPage() {
                 <CardContent className="space-y-3 text-sm text-muted-foreground">
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Opening balance
+                      {t("accounts.card.field.currentBalance")}
                     </p>
                     <p className="text-lg font-semibold text-foreground">
-                      {openingBalance}
+                      {currentBalance}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Currency
+                      {t("accounts.card.field.openingBalance")}
+                    </p>
+                    <p>{openingBalance}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground/80">
+                      {t("accounts.card.field.currency")}
                     </p>
                     <p>{account.currency}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-wide text-muted-foreground/80">
-                      Added on
+                      {t("accounts.card.field.created")}
                     </p>
                     <p>{createdAt}</p>
                   </div>

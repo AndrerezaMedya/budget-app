@@ -1,3 +1,4 @@
+import { getTranslator } from "@/lib/i18n";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -7,34 +8,32 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export default function ImportsPage() {
+export default async function ImportsPage() {
+  const { t } = await getTranslator();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Imports & Exports</h1>
-          <p className="text-sm text-muted-foreground">
-            CSV import wizard, preview, dedupe rules, and export flows.
-          </p>
+          <h1 className="text-2xl font-semibold">{t("imports.heading")}</h1>
+          <p className="text-sm text-muted-foreground">{t("imports.subheading")}</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">Download template</Button>
-          <Button>Start CSV import</Button>
+          <Button variant="outline">{t("imports.button.template")}</Button>
+          <Button>{t("imports.button.start")}</Button>
         </div>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Import history</CardTitle>
-          <CardDescription>
-            Every upload captured with status, row counts, and warnings.
-          </CardDescription>
+          <CardTitle>{t("imports.history.title")}</CardTitle>
+          <CardDescription>{t("imports.history.description")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm text-muted-foreground">
           <div className="rounded-lg border border-dashed border-border p-4">
-            Awaiting first import. CSV mapping UI arrives in Milestone 6.
+            {t("imports.history.empty.primary")}
           </div>
           <div className="rounded-lg border border-dashed border-border p-4">
-            Google Sheets sync lives here post-MVP.
+            {t("imports.history.empty.secondary")}
           </div>
         </CardContent>
       </Card>

@@ -1,6 +1,7 @@
 import { TrendingUp } from "lucide-react";
 
 import { formatCurrency } from "@/lib/format";
+import { getTranslator, type Translator } from "@/lib/i18n";
 import { fetchOverviewSnapshot } from "@/lib/supabase/queries/overview";
 import {
   Card,
@@ -10,41 +11,61 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-function formatDailySpend(amountMinor: number) {
-  if (amountMinor === 0) return "Rp 0 / day";
-  return `${formatCurrency(amountMinor)} / day`;
+function formatDailySpend(amountMinor: number, translate: Translator) {
+  if (amountMinor === 0) return translate("overview.metrics.spendVelocity.zero");
+  return translate("overview.metrics.spendVelocity.value", {
+    amount: formatCurrency(amountMinor),
+  });
 }
 
 export default async function OverviewPage() {
+  const { t } = await getTranslator();
   const snapshot = await fetchOverviewSnapshot();
 
   const metrics = [
     {
-      title: "Net cashflow",
-      description: `Period ${snapshot.period}`,
+      title: t("overview.metrics.totalBalance.title"),
+      description: t("overview.metrics.totalBalance.description"),
+      value: formatCurrency(snapshot.totalAccountBalanceMinorIdr),
+      footnote: t("overview.metrics.totalBalance.footnote", {
+        count: snapshot.activeAccounts,
+      }),
+    },
+    {
+      title: t("overview.metrics.netCashflow.title"),
+      description: t("overview.metrics.netCashflow.description", {
+        period: snapshot.period,
+      }),
       value: formatCurrency(snapshot.netCashflowMinor),
-      footnote: `Income ${formatCurrency(snapshot.totalIncomeMinor)} vs expense ${formatCurrency(snapshot.totalExpenseMinor)}`,
+      footnote: t("overview.metrics.netCashflow.footnote", {
+        income: formatCurrency(snapshot.totalIncomeMinor),
+        expense: formatCurrency(snapshot.totalExpenseMinor),
+      }),
     },
     {
-      title: "Spend velocity",
-      description: "Average daily expense",
-      value: formatDailySpend(snapshot.averageExpensePerDayMinor),
-      footnote: `${snapshot.recentTransactions} recent transactions captured`,
+      title: t("overview.metrics.spendVelocity.title"),
+      description: t("overview.metrics.spendVelocity.description"),
+      value: formatDailySpend(snapshot.averageExpensePerDayMinor, t),
+      footnote: t("overview.metrics.spendVelocity.footnote", {
+        count: snapshot.recentTransactions,
+      }),
     },
     {
-      title: "Budget burn",
-      description: "Budgets nearing limit (≥80%)",
+      title: t("overview.metrics.budgetBurn.title"),
+      description: t("overview.metrics.budgetBurn.description"),
       value: `${snapshot.nearingLimitBudgets}`,
-      footnote: `${snapshot.activeBudgets} active budgets this month`,
+      footnote: t("overview.metrics.budgetBurn.footnote", {
+        count: snapshot.activeBudgets,
+      }),
     },
   ];
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Overview</h1>
+        <h1 className="text-2xl font-semibold">{t("overview.heading")}</h1>
         <p className="text-sm text-muted-foreground">
-          Snapshot of Supabase-backed metrics for the current budgeting period.
+          {t("overview.subheading")}
         </p>
       </header>
 
@@ -73,24 +94,28 @@ export default async function OverviewPage() {
       <section className="grid gap-4 lg:grid-cols-5">
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Active accounts</CardTitle>
+            <CardTitle>{t("overview.accounts.title")}</CardTitle>
             <CardDescription>
-              Currently tracking {snapshot.activeAccounts} accounts in Supabase.
+              {t("overview.accounts.description", {
+                count: snapshot.activeAccounts,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
-            Time-series charts wire in once account_daily summaries are hydrated.
+            {t("overview.accounts.placeholder")}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2">
           <CardHeader>
-            <CardTitle>Budgets overview</CardTitle>
+            <CardTitle>{t("overview.budgets.title")}</CardTitle>
             <CardDescription>
-              {snapshot.activeBudgets} budgets monitored this period.
+              {t("overview.budgets.description", {
+                count: snapshot.activeBudgets,
+              })}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex h-64 w-full items-center justify-center rounded-lg border border-dashed border-border bg-muted/30 text-sm text-muted-foreground">
-            Replace with donut/chart once category summaries feed visualization.
+            {t("overview.budgets.placeholder")}
           </CardContent>
         </Card>
       </section>

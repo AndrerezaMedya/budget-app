@@ -1,4 +1,5 @@
-import { fetchCategories } from "@/lib/supabase/queries/categories";
+import { getTranslator } from "@/lib/i18n";
+import { fetchProfilePreferences } from "@/lib/supabase/queries/profile";
 import {
   Card,
   CardContent,
@@ -6,83 +7,43 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { CreateCategoryForm } from "@/components/forms/create-category-form";
+import { LanguagePreferenceForm } from "@/components/forms/language-preference-form";
 
 export default async function SettingsPage() {
-  const categories = await fetchCategories();
+  const { t } = await getTranslator();
+  const profile = await fetchProfilePreferences();
+  const currentLocale = profile?.locale ?? "en";
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <p className="text-sm text-muted-foreground">
-          Workspace preferences, timezone, integrations, and taxonomy.
-        </p>
+        <h1 className="text-2xl font-semibold">{t("settings.title")}</h1>
+        <p className="text-sm text-muted-foreground">{t("settings.subtitle")}</p>
       </header>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Timezone</CardTitle>
-            <CardDescription>
-              Workspace timezone is fixed to UTC+7 (Asia/Jakarta).
-            </CardDescription>
+            <CardTitle>{t("settings.timezone.title")}</CardTitle>
+            <CardDescription>{t("settings.timezone.description")}</CardDescription>
           </CardHeader>
-          <CardContent className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Settings form coming soon. Store overrides in the `profiles` table if you need a different offset.
+          <CardContent className="space-y-4 rounded-lg border border-dashed border-border p-4">
+            <p className="text-sm text-muted-foreground">{t("settings.timezone.body")}</p>
+            <div className="space-y-2">
+              <h2 className="text-sm font-semibold">{t("language.section.title")}</h2>
+              <p className="text-xs text-muted-foreground">
+                {t("language.section.description")}
+              </p>
+              <LanguagePreferenceForm locale={currentLocale} />
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Security</CardTitle>
-            <CardDescription>
-              Supabase Row Level Security keeps data scoped per user.
-            </CardDescription>
+            <CardTitle>{t("settings.security.title")}</CardTitle>
+            <CardDescription>{t("settings.security.description")}</CardDescription>
           </CardHeader>
           <CardContent className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-            Surface device sessions, login methods, and 2FA toggles here.
-          </CardContent>
-        </Card>
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Categories</CardTitle>
-            <CardDescription>
-              {categories.length} categories loaded from Supabase.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <CreateCategoryForm />
-            {categories.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">
-                No categories yet. Use the form above to add your first one.
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Category</th>
-                      <th className="px-4 py-3 text-left">Parent</th>
-                      <th className="px-4 py-3 text-left">Created</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {categories.map((category) => (
-                      <tr key={category.id}>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {category.name}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {category.parentName ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {new Date(category.createdAt).toLocaleDateString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {t("settings.security.body")}
           </CardContent>
         </Card>
       </div>
