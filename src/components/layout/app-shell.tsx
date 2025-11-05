@@ -96,22 +96,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           })}
         </nav>
         <div className="border-t border-border px-4 py-4">
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-            <div className="flex items-center gap-3">
-              <CircleUserRound className="size-9 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-semibold">{accountLabel}</p>
-                <p className="text-xs text-muted-foreground">{accountSubline}</p>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <CircleUserRound className="size-9 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold" title={accountLabel}>
+                  {accountLabel}
+                </p>
+                <p
+                  className="truncate text-xs text-muted-foreground"
+                  title={accountSubline}
+                >
+                  {accountSubline}
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
               {user ? (
-                <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleSignOut}
+                  className="w-full whitespace-nowrap sm:w-auto"
+                >
                   <LogOut className="mr-1 size-4" aria-hidden="true" />
                   Sign out
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" asChild>
+                <Button variant="outline" size="sm" asChild className="w-full sm:w-auto">
                   <Link href="/sign-in">Sign in</Link>
                 </Button>
               )}
@@ -135,15 +147,36 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Offline-friendly finance workspace
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <ThemeToggle />
             {user ? (
-              <Button variant="outline" size="sm" onClick={handleSignOut}>
-                <LogOut className="mr-1 size-4" aria-hidden="true" />
-                Sign out
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="sm:hidden"
+                  onClick={handleSignOut}
+                  aria-label="Sign out"
+                >
+                  <LogOut className="size-4" aria-hidden="true" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="hidden sm:inline-flex"
+                  onClick={handleSignOut}
+                >
+                  <LogOut className="mr-1 size-4" aria-hidden="true" />
+                  Sign out
+                </Button>
+              </>
             ) : (
-              <Button variant="outline" size="sm" asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                asChild
+                className="w-full sm:w-auto"
+              >
                 <Link href="/sign-in">Sign in</Link>
               </Button>
             )}
