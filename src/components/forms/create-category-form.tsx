@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState } from "react";
+import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { createCategoryAction } from "@/actions/categories";
 import { initialActionState } from "@/actions/types";
@@ -33,6 +33,12 @@ export function CreateCategoryForm() {
   const [categorySlug, setCategorySlug] = useState<string>("");
   const [subcategorySlug, setSubcategorySlug] = useState<string>("");
 
+  const resetCategorySelection = useCallback(() => {
+    setCategoryType("expense");
+    setCategorySlug("");
+    setSubcategorySlug("");
+  }, []);
+
   useEffect(() => {
     if (state.status === statusRef.current) {
       return;
@@ -49,10 +55,8 @@ export function CreateCategoryForm() {
 
       const frame = requestAnimationFrame(() => {
         formRef.current?.reset();
+        resetCategorySelection();
         setIsOpen(false);
-        setCategoryType("expense");
-        setCategorySlug("");
-        setSubcategorySlug("");
       });
       return () => cancelAnimationFrame(frame);
     }
@@ -64,20 +68,13 @@ export function CreateCategoryForm() {
         variant: "error",
       });
     }
-  }, [state.status, state.message, toast, t]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setCategoryType("expense");
-      setCategorySlug("");
-      setSubcategorySlug("");
-    }
-  }, [isOpen]);
+  }, [state.status, state.message, toast, t, resetCategorySelection]);
 
   const toggle = () => {
     setIsOpen((prev) => {
       if (prev) {
         formRef.current?.reset();
+        resetCategorySelection();
       }
       return !prev;
     });
@@ -91,7 +88,7 @@ export function CreateCategoryForm() {
     return categoryOptions.find((category) => category.slug === categorySlug) ?? null;
   }, [categoryOptions, categorySlug]);
 
-  const subcategoryOptions = selectedCategory?.subcategories ?? [];
+  const subcategoryOptions = useMemo(() => selectedCategory?.subcategories ?? [], [selectedCategory]);
 
   const selectedSubcategory: PredefinedSubcategory | null = useMemo(() => {
     if (!subcategorySlug) return null;
@@ -157,7 +154,7 @@ export function CreateCategoryForm() {
               </option>
               {categoryOptions.map((option) => (
                 <option key={option.slug} value={option.slug}>
-                  {t(option.nameKey)}
+                  {t(option.nameKey as Parameters<typeof t>[0])}
                 </option>
               ))}
             </select>
@@ -178,7 +175,7 @@ export function CreateCategoryForm() {
                 </option>
                 {subcategoryOptions.map((option) => (
                   <option key={option.slug} value={option.slug}>
-                    {t(option.nameKey)}
+                    {t(option.nameKey as Parameters<typeof t>[0])}
                   </option>
                 ))}
               </select>
@@ -192,7 +189,7 @@ export function CreateCategoryForm() {
             <div className="rounded-md border border-dashed border-border/80 p-3 text-sm">
               <p className="font-medium">
                 {t("categories.form.preview.title", {
-                  category: t(selectedCategory.nameKey),
+                  category: t(selectedCategory.nameKey as Parameters<typeof t>[0]),
                 })}
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
