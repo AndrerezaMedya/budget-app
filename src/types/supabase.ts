@@ -229,6 +229,173 @@ export type Database = {
         };
         Relationships: [];
       };
+      receipt_ingestion_jobs: {
+        Row: {
+          attempt_count: number;
+          completed_at: string | null;
+          created_at: string;
+          error_code: string | null;
+          error_message: string | null;
+          id: string;
+          image_hash: string | null;
+          progress_detail: Json | null;
+          progress_message: string | null;
+          progress_stage: string;
+          progress_value: number | null;
+          source_filename: string | null;
+          status: Database["public"]["Enums"]["receipt_job_status"];
+          storage_path: string | null;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          attempt_count?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          error_code?: string | null;
+          error_message?: string | null;
+          id?: string;
+          image_hash?: string | null;
+          progress_detail?: Json | null;
+          progress_message?: string | null;
+          progress_stage?: string;
+          progress_value?: number | null;
+          source_filename?: string | null;
+          status?: Database["public"]["Enums"]["receipt_job_status"];
+          storage_path?: string | null;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          attempt_count?: number;
+          completed_at?: string | null;
+          created_at?: string;
+          error_code?: string | null;
+          error_message?: string | null;
+          id?: string;
+          image_hash?: string | null;
+          progress_detail?: Json | null;
+          progress_message?: string | null;
+          progress_stage?: string;
+          progress_value?: number | null;
+          source_filename?: string | null;
+          status?: Database["public"]["Enums"]["receipt_job_status"];
+          storage_path?: string | null;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
+      receipt_line_items: {
+        Row: {
+          category: string | null;
+          id: string;
+          line_total_minor: number;
+          quantity: string;
+          receipt_id: string;
+          unit_price_minor: number | null;
+        };
+        Insert: {
+          category?: string | null;
+          id?: string;
+          line_total_minor: number;
+          quantity?: string;
+          receipt_id: string;
+          unit_price_minor?: number | null;
+        };
+        Update: {
+          category?: string | null;
+          id?: string;
+          line_total_minor?: number;
+          quantity?: string;
+          receipt_id?: string;
+          unit_price_minor?: number | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "receipt_line_items_receipt_id_fkey";
+            columns: ["receipt_id"];
+            referencedRelation: "receipts";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      receipts: {
+        Row: {
+          confidence: string | null;
+          created_at: string;
+          currency: string;
+          discount_minor: number | null;
+          id: string;
+          image_hash: string;
+          job_id: string | null;
+          merchant_address: string | null;
+          merchant_name: string;
+          model_response: Json;
+          notes: string | null;
+          ocr_text: string | null;
+          payment_method: string | null;
+          purchase_at: string | null;
+          storage_path: string;
+          subtotal_minor: number | null;
+          tax_minor: number | null;
+          total_minor: number;
+          updated_at: string;
+          user_id: string;
+        };
+        Insert: {
+          confidence?: string | null;
+          created_at?: string;
+          currency?: string;
+          discount_minor?: number | null;
+          id?: string;
+          image_hash: string;
+          job_id?: string | null;
+          merchant_address?: string | null;
+          merchant_name: string;
+          model_response: Json;
+          notes?: string | null;
+          ocr_text?: string | null;
+          payment_method?: string | null;
+          purchase_at?: string | null;
+          storage_path: string;
+          subtotal_minor?: number | null;
+          tax_minor?: number | null;
+          total_minor: number;
+          updated_at?: string;
+          user_id: string;
+        };
+        Update: {
+          confidence?: string | null;
+          created_at?: string;
+          currency?: string;
+          discount_minor?: number | null;
+          id?: string;
+          image_hash?: string;
+          job_id?: string | null;
+          merchant_address?: string | null;
+          merchant_name?: string;
+          model_response?: Json;
+          notes?: string | null;
+          ocr_text?: string | null;
+          payment_method?: string | null;
+          purchase_at?: string | null;
+          storage_path?: string;
+          subtotal_minor?: number | null;
+          tax_minor?: number | null;
+          total_minor?: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "receipts_job_id_fkey";
+            columns: ["job_id"];
+            referencedRelation: "receipt_ingestion_jobs";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       profiles: {
         Row: {
           created_at: string;
@@ -409,6 +576,7 @@ export type Database = {
         | "investment"
         | "savings"
         | "other";
+      receipt_job_status: "pending" | "processing" | "succeeded" | "failed";
       transaction_type: "income" | "expense" | "transfer";
       transfer_direction: "in" | "out";
     };
