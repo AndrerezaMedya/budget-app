@@ -61,7 +61,7 @@ Welcome to your personal finance workspace. This guide walks you through every a
 
 - Manage profile, workspace preferences, category tree, and integrations.
 - Workspace timezone defaults to UTC+7 (Asia/Jakarta); adjust via Supabase `profiles` if needed.
-- Use *Add category* to create categories and pick from curated icon and color options for consistent visuals.
+- Use _Add category_ to create categories and pick from curated icon and color options for consistent visuals.
 - Switch the interface between English and Bahasa Indonesia from the language selector.
 - Theme toggle lives in the global header for quick light/dark switching.
 - Sign out from either the sidebar card or the header icon (changes persist across sessions).
