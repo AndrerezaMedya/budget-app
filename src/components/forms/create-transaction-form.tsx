@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+import { Plus, Scan, X } from "lucide-react";
 import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 
 import { createTransactionAction } from "@/actions/transactions";
@@ -34,6 +36,7 @@ interface CreateTransactionFormProps {
   accounts: AccountOption[];
   tags: TagOption[];
   defaultOccurredAt: string;
+  displayMode?: "inline" | "floating";
 }
 
 const TYPE_OPTIONS: Array<{ value: TransactionType; labelKey: "transactions.type.expense" | "transactions.type.income" | "transactions.type.transfer" }> = [
@@ -45,7 +48,7 @@ const TYPE_OPTIONS: Array<{ value: TransactionType; labelKey: "transactions.type
 const SELECT_BASE_CLASSES =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
-export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: CreateTransactionFormProps) {
+export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displayMode = "inline" }: CreateTransactionFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [transactionType, setTransactionType] = useState<TransactionType>("expense");
@@ -117,6 +120,23 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
   };
   const hasAccounts = accounts.length > 0;
 
+  const containerClasses =
+    displayMode === "floating"
+      ? "fixed bottom-4 left-4 right-4 z-50 flex w-full max-w-sm flex-col items-end gap-3 sm:bottom-6 sm:left-auto sm:right-6"
+      : "flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end";
+
+  const triggerClassName =
+    displayMode === "floating"
+      ? `h-14 w-14 rounded-full shadow-lg ${isOpen ? "bg-secondary text-secondary-foreground" : ""}`
+      : "inline-flex items-center gap-2 sm:w-auto";
+
+  const triggerSize = displayMode === "floating" ? "icon" : "sm";
+
+  const formClasses =
+    displayMode === "floating"
+      ? "w-full space-y-4 overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xl max-h-[calc(100vh-7rem)]"
+      : "w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[26rem]";
+
   const decoratedAccountOptions = useMemo(
     () =>
       accounts.map((account) => {
@@ -139,12 +159,6 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
   const selectedAccount = selectedAccountId ? accountMap.get(selectedAccountId) ?? null : null;
   const transferFromAccount = transferFromId ? accountMap.get(transferFromId) ?? null : null;
   const transferToAccount = transferToId ? accountMap.get(transferToId) ?? null : null;
-
-  useEffect(() => {
-    if (transferFromId && transferFromId === transferToId) {
-      setTransferToId("");
-    }
-  }, [transferFromId, transferToId]);
 
   const incomeCategoryOptions = useMemo(() => {
     const translateKey = (key: string | null, fallback: string) =>
@@ -190,16 +204,27 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
   const tagOptions = useMemo(() => tags, [tags]);
 
   return (
-    <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto sm:items-end">
+    <div className={containerClasses}>
       <Button
         type="button"
         onClick={toggle}
-        className="inline-flex items-center gap-2 sm:w-auto"
+        className={triggerClassName}
         variant={isOpen ? "secondary" : "default"}
-        size="sm"
+        size={triggerSize}
         disabled={!hasAccounts}
       >
-        {isOpen ? t("transactions.toggle.close") : t("transactions.toggle.open")}
+        {displayMode === "floating" ? (
+          <>
+            {isOpen ? <X className="h-6 w-6" /> : <Plus className="h-6 w-6" />}
+            <span className="sr-only">
+              {isOpen ? t("transactions.toggle.close") : t("transactions.toggle.open")}
+            </span>
+          </>
+        ) : isOpen ? (
+          t("transactions.toggle.close")
+        ) : (
+          t("transactions.toggle.open")
+        )}
       </Button>
 
       {!hasAccounts ? (
@@ -212,8 +237,15 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
         <form
           ref={formRef}
           action={formAction}
-          className="w-full max-w-full space-y-4 rounded-lg border border-border bg-card p-4 shadow-sm sm:min-w-[26rem]"
+          className={formClasses}
         >
+          <Button asChild variant="outline" size="sm" className="w-full justify-center">
+            <Link href="/app/receipts">
+              <Scan className="mr-2 h-4 w-4" />
+              {t("transactions.form.scanReceipt")}
+            </Link>
+          </Button>
+
           <div className="space-y-2">
             <Label htmlFor="transaction-type">{t("transactions.field.type")}</Label>
             <select
@@ -250,7 +282,13 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
                   name="fromAccountId"
                   className={SELECT_BASE_CLASSES}
                   value={transferFromId}
-                  onChange={(event) => setTransferFromId(event.target.value)}
+                  onChange={(event) => {
+                    const nextFrom = event.target.value;
+                    setTransferFromId(nextFrom);
+                    if (nextFrom && nextFrom === transferToId) {
+                      setTransferToId("");
+                    }
+                  }}
                   required
                 >
                   <option value="" disabled>
@@ -282,7 +320,14 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
                   name="toAccountId"
                   className={SELECT_BASE_CLASSES}
                   value={transferToId}
-                  onChange={(event) => setTransferToId(event.target.value)}
+                  onChange={(event) => {
+                    const nextTo = event.target.value;
+                    if (nextTo && nextTo === transferFromId) {
+                      setTransferToId("");
+                      return;
+                    }
+                    setTransferToId(nextTo);
+                  }}
                   required
                 >
                   <option value="" disabled>
@@ -474,6 +519,9 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt }: Cre
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
+            <Button type="button" variant="outline" onClick={toggle}>
+              {t("transactions.toggle.close")}
+            </Button>
             <Button type="submit">{t("transactions.save")}</Button>
           </div>
         </form>
