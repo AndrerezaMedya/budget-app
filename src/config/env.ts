@@ -14,6 +14,9 @@ const serverSchema = z.object({
     .string()
     .min(1, "Missing SUPABASE_SERVICE_ROLE_KEY")
     .optional(),
+  GEMINI_API_KEY: z.string().min(1, "Missing GEMINI_API_KEY").optional(),
+  GEMINI_API_BASE_URL: z.string().url("GEMINI_API_BASE_URL must be a valid URL").optional(),
+  GEMINI_RECEIPT_MODEL: z.string().min(1).optional(),
 });
 
 const clientEnv = clientSchema.safeParse({
@@ -34,6 +37,9 @@ if (!clientEnv.success) {
 
 const serverEnv = serverSchema.safeParse({
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY,
+  GEMINI_API_BASE_URL: process.env.GEMINI_API_BASE_URL,
+  GEMINI_RECEIPT_MODEL: process.env.GEMINI_RECEIPT_MODEL,
 });
 
 if (!serverEnv.success) {
