@@ -5,6 +5,7 @@ import {
   FileSpreadsheet,
   LayoutDashboard,
   LineChart,
+  ReceiptText,
   Settings,
   Wallet,
 } from "lucide-react";
@@ -30,6 +31,12 @@ export const APP_ROUTES: AppRoute[] = [
     descriptionKey: "nav.transactions.description",
     href: "/app/transactions",
     icon: CreditCard,
+  },
+  {
+    labelKey: "nav.receipts.label",
+    descriptionKey: "nav.receipts.description",
+    href: "/app/receipts",
+    icon: ReceiptText,
   },
   {
     labelKey: "nav.accounts.label",
