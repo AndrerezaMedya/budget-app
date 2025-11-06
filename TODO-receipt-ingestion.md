@@ -1,0 +1,22 @@
+# Receipt Ingestion TODO
+
+- [x] Provision Supabase storage bucket `receipts/` with server-only write policy.
+- [x] Add database tables/migrations (`receipts`, `receipt_line_items`, `receipt_ingestion_jobs`).
+- [x] Design Zod schema for normalized receipt JSON under `src/schemas/receipt.ts`.
+- [x] Implement image preprocessing helpers (`sharp` + optional OpenCV fallback) in `src/lib/receipts/preprocess.ts`.
+- [x] Implement perceptual hashing + dedupe guard in `src/lib/receipts/dedupe.ts`.
+- [x] Wire Supabase Storage upload + hash check in API route `src/app/api/receipts/route.ts`.
+- [x] Build OCR module using `tesseract.js` with `eng+ind` configuration.
+- [x] Create Gemini system prompt + server-only client for `gemini-2.5-flash-lite` (`src/lib/receipts/parse.ts`).
+- [x] Add validation & error reporting pipeline (Zod + structured errors) before persistence.
+- [x] Persist OCR text, parsed JSON, and linkage to user/account via Supabase server client.
+- [x] Implement ingestion job state machine + retry handling (`receipt_ingestion_jobs`).
+- [x] Build UI upload form with progress feedback under `src/components/forms/upload-receipt-form.tsx`.
+  - [x] Base upload form with toast feedback and currency/locale hints.
+  - [x] Poll ingestion job status and surface warnings/errors inline.
+- [ ] Surface parsed receipts in Transactions (preview + add-to-ledger flow).
+  - [x] Display recent parsed receipts with status, totals, and confidence.
+  - [ ] Trigger ledger creation from a processed receipt.
+- [ ] Add integration tests / mocked pipelines to cover happy path & failure modes.
+- [ ] Document environment variables & Gemini API key configuration.
+- [ ] Add docs for expected Storage permissions and cleanup strategy.
