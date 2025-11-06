@@ -1,6 +1,7 @@
-import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
-import { convertMinorToIdr, fetchRatesToIdr } from "@/lib/currency";
+import { getCategoryByName, getSubcategoryByName } from "@/config/category-definitions";
 import { DEFAULT_CURRENCY } from "@/config/currencies";
+import { convertMinorToIdr, fetchRatesToIdr } from "@/lib/currency";
+import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 
 type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
@@ -10,7 +11,7 @@ type AccountRow = Pick<
 >;
 type CategoryRow = Pick<
   Database["public"]["Tables"]["categories"]["Row"],
-  "id" | "name"
+  "id" | "name" | "parent_id"
 >;
 
 type TransactionQueryRow = TransactionRow & {
@@ -25,8 +26,11 @@ export type HydratedTransaction = {
   amountMinor: number;
   currency: string;
   type: TransactionRow["type"];
+  accountId: string | null;
   account: AccountRow | null;
   category: CategoryRow | null;
+  categorySlug: string | null;
+  subcategorySlug: string | null;
   transferDirection: TransactionRow["transfer_direction"];
   createdAt: string;
 };
@@ -137,9 +141,9 @@ export async function fetchRecentTransactions(
   const { data, error } = await supabase
     .from("transactions")
     .select(
-      `id, description, occurred_at, amount_minor, currency, type, transfer_direction, created_at,
+      `id, account_id, description, occurred_at, amount_minor, currency, type, transfer_direction, created_at,
         account:accounts!transactions_account_id_fkey ( id, name ),
-        category:categories!transactions_category_id_fkey ( id, name )`
+        category:categories!transactions_category_id_fkey ( id, name, parent_id )`
     )
     .order("occurred_at", { ascending: false })
     .limit(limit);
@@ -150,16 +154,39 @@ export async function fetchRecentTransactions(
 
   const rows = (data ?? []) as TransactionQueryRow[];
 
-  return rows.map((row) => ({
-    id: row.id,
-    description: row.description,
-    occurredAt: row.occurred_at,
-    amountMinor: row.amount_minor,
-    currency: row.currency,
-    type: row.type,
-    account: row.account,
-    category: row.category,
-    transferDirection: row.transfer_direction,
-    createdAt: row.created_at,
-  }));
+  return rows.map((row) => {
+    let categorySlug: string | null = null;
+    let subcategorySlug: string | null = null;
+
+    if (row.category) {
+      if (row.category.parent_id) {
+        const lookup = getSubcategoryByName(row.category.name);
+        if (lookup) {
+          categorySlug = lookup.category.slug;
+          subcategorySlug = lookup.subcategory.slug;
+        }
+      } else {
+        const definition = getCategoryByName(row.category.name);
+        if (definition) {
+          categorySlug = definition.slug;
+        }
+      }
+    }
+
+    return {
+      id: row.id,
+      description: row.description,
+      occurredAt: row.occurred_at,
+      amountMinor: row.amount_minor,
+      currency: row.currency,
+      type: row.type,
+      accountId: row.account_id,
+      account: row.account,
+      category: row.category,
+      categorySlug,
+      subcategorySlug,
+      transferDirection: row.transfer_direction,
+      createdAt: row.created_at,
+    } satisfies HydratedTransaction;
+  });
 }
