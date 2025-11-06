@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
-import { ensurePredefinedCategoryExists } from "@/actions/categories";
+import { ensurePredefinedCategoryExists } from "@/lib/categories/predefined";
 
 import type { ActionState } from "@/actions/types";
 

@@ -4,13 +4,12 @@ import { randomUUID } from "node:crypto";
 
 import { revalidatePath } from "next/cache";
 
+import { resolvePredefinedCategoryId } from "@/lib/categories/predefined";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/server";
 import { normalizeCurrency, parseAmountToMinor } from "@/lib/currency";
 import type { Database } from "@/types/supabase";
 
 import type { ActionState } from "@/actions/types";
-import { ensurePredefinedCategoryExists } from "@/actions/categories";
-import type { PredefinedCategoryType } from "@/config/category-definitions";
 
 const SUPPORTED_TYPES: Array<Database["public"]["Enums"]["transaction_type"]> = [
   "income",
@@ -175,61 +174,26 @@ export async function createTransactionAction(
   let categoryId: string | null = null;
   let shouldRevalidateCategories = false;
 
-  async function resolveCategory(
-    categoryType: PredefinedCategoryType,
-    categorySlug: string | null,
-    subcategorySlug?: string | null,
-  ) {
-    if (!categorySlug) {
-      return null;
-    }
-
-    const trimmedCategorySlug = categorySlug.trim();
-    const trimmedSubcategorySlug = subcategorySlug?.trim() ?? null;
-
-    if (trimmedSubcategorySlug && !trimmedCategorySlug) {
-      throw new Error("Select a category before choosing a subcategory.");
-    }
-
-    const result = await ensurePredefinedCategoryExists({
-      supabase,
-      userId,
-      type: categoryType,
-      categorySlug: trimmedCategorySlug,
-      subcategorySlug: trimmedSubcategorySlug,
-    });
-
-    if (result.parentCreated || result.childCreated) {
-      shouldRevalidateCategories = true;
-    }
-
-    if (trimmedSubcategorySlug) {
-      if (!result.childId) {
-        throw new Error("Unable to resolve category.");
-      }
-      return result.childId;
-    }
-
-    if (!result.parentId) {
-      throw new Error("Unable to resolve category.");
-    }
-
-    return result.parentId;
-  }
-
   try {
     if (type === "expense") {
-      categoryId = await resolveCategory(
-        "expense",
-        (formData.get("expenseCategorySlug") as string | null) ?? null,
-        (formData.get("expenseSubcategorySlug") as string | null) ?? null,
-      );
+      const result = await resolvePredefinedCategoryId({
+        supabase,
+        userId,
+        categoryType: "expense",
+        categorySlug: (formData.get("expenseCategorySlug") as string | null) ?? null,
+        subcategorySlug: (formData.get("expenseSubcategorySlug") as string | null) ?? null,
+      });
+      categoryId = result.categoryId;
+      shouldRevalidateCategories ||= result.created;
     } else if (type === "income") {
-      categoryId = await resolveCategory(
-        "income",
-        (formData.get("incomeCategorySlug") as string | null) ?? null,
-        null,
-      );
+      const result = await resolvePredefinedCategoryId({
+        supabase,
+        userId,
+        categoryType: "income",
+        categorySlug: (formData.get("incomeCategorySlug") as string | null) ?? null,
+      });
+      categoryId = result.categoryId;
+      shouldRevalidateCategories ||= result.created;
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to resolve category.";
@@ -281,6 +245,140 @@ export async function createTransactionAction(
   }
 
   return { status: "success", message: "Transaction added." };
+}
+
+export async function updateTransactionAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const supabase = await createSupabaseRouteHandlerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "error", message: "You must be signed in." };
+  }
+
+  const transactionId = (formData.get("transactionId") as string | null)?.trim();
+
+  if (!transactionId) {
+    return { status: "error", message: "Missing transaction identifier." };
+  }
+
+  const description = (formData.get("description") as string | null)?.trim() ?? null;
+  const occurredAt = parseDate(formData.get("occurredAt"));
+
+  if (!occurredAt) {
+    return { status: "error", message: "Provide a valid date." };
+  }
+
+  const amountInput = formData.get("amount");
+  const requestedAccountId = (formData.get("accountId") as string | null)?.trim() ?? null;
+
+  const { data: existingTransaction, error: fetchError } = await supabase
+    .from("transactions")
+    .select("id, type, account_id, currency, category_id")
+    .eq("id", transactionId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (fetchError) {
+    return { status: "error", message: fetchError.message };
+  }
+
+  if (!existingTransaction) {
+    return { status: "error", message: "Transaction not found." };
+  }
+
+  if (existingTransaction.type === "transfer") {
+    return { status: "error", message: "Transfers cannot be edited here yet." };
+  }
+
+  const resolvedAccountId = requestedAccountId ?? existingTransaction.account_id;
+
+  if (!resolvedAccountId) {
+    return { status: "error", message: "Select a destination account." };
+  }
+
+  const { data: accountRow, error: accountError } = await supabase
+    .from("accounts")
+    .select("id, currency")
+    .eq("id", resolvedAccountId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (accountError) {
+    return { status: "error", message: accountError.message };
+  }
+
+  if (!accountRow) {
+    return { status: "error", message: "Unable to resolve account." };
+  }
+
+  const normalizedCurrency = normalizeCurrency(accountRow.currency);
+  const amountMinor = parseAmountToMinor(amountInput, normalizedCurrency);
+
+  if (amountMinor === null) {
+    return { status: "error", message: "Enter a positive amount." };
+  }
+
+  let categoryId: string | null = existingTransaction.category_id ?? null;
+  let shouldRevalidateCategories = false;
+
+  try {
+    if (existingTransaction.type === "expense") {
+      const result = await resolvePredefinedCategoryId({
+        supabase,
+        userId: user.id,
+        categoryType: "expense",
+        categorySlug: (formData.get("expenseCategorySlug") as string | null) ?? null,
+        subcategorySlug: (formData.get("expenseSubcategorySlug") as string | null) ?? null,
+      });
+      categoryId = result.categoryId;
+      shouldRevalidateCategories ||= result.created;
+    } else if (existingTransaction.type === "income") {
+      const result = await resolvePredefinedCategoryId({
+        supabase,
+        userId: user.id,
+        categoryType: "income",
+        categorySlug: (formData.get("incomeCategorySlug") as string | null) ?? null,
+      });
+      categoryId = result.categoryId;
+      shouldRevalidateCategories ||= result.created;
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to resolve category.";
+    return { status: "error", message };
+  }
+
+  const { error: updateError } = await supabase
+    .from("transactions")
+    .update({
+      description,
+      account_id: resolvedAccountId,
+      amount_minor: amountMinor,
+      currency: normalizedCurrency,
+      occurred_at: occurredAt,
+      booked_at: occurredAt,
+      category_id: categoryId,
+    })
+    .eq("id", transactionId)
+    .eq("user_id", user.id);
+
+  if (updateError) {
+    return { status: "error", message: updateError.message };
+  }
+
+  revalidatePath("/app/transactions");
+  revalidatePath("/app/overview");
+  revalidatePath("/app/accounts");
+  revalidatePath("/app/budgets");
+  if (shouldRevalidateCategories) {
+    revalidatePath("/app/settings");
+  }
+
+  return { status: "success", message: "Transaction updated." };
 }
 
 export async function deleteTransactionAction(
