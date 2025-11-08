@@ -1,15 +1,35 @@
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type DragEvent,
+  type KeyboardEvent,
+} from "react";
 import { useRouter } from "next/navigation";
 
-import { ACCOUNT_CURRENCY_OPTIONS } from "@/config/currencies";
+import { ACCOUNT_CURRENCY_OPTIONS, getCurrencyDecimals } from "@/config/currencies";
+import { createTransactionAction } from "@/actions/transactions";
+import { initialActionState } from "@/actions/types";
 import { useToast } from "@/components/providers/toast-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const ACCEPTED_MIME_TYPES = [
   "image/jpeg",
@@ -20,7 +40,11 @@ const ACCEPTED_MIME_TYPES = [
   "image/tiff",
 ];
 
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
+
 const POLL_INTERVAL_MS = 1500;
+const AUTO_STAGE_STEP_MS = 2200;
+const CATCHUP_STAGE_STEP_MS = 420;
 
 const JOB_STATUS_LABEL: Record<ReceiptJobStatus, string> = {
   pending: "Menunggu antrian",
@@ -29,6 +53,11 @@ const JOB_STATUS_LABEL: Record<ReceiptJobStatus, string> = {
   failed: "Gagal diproses",
 };
 
+const TEXTAREA_BASE_CLASSES =
+  "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+
+const DROPZONE_BASE_CLASSES =
+  "relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 const PROGRESS_STAGE_ORDER: ReceiptProgressStage[] = [
   "uploading",
   "enhancing",
@@ -45,49 +74,49 @@ const PROGRESS_STEPS: Array<{
   description: string;
   range: [number, number];
 }> = [
-  {
-    id: "uploading",
-    title: "Mengunggah struk - 0-10%",
-    description: "Mengunggah struk...",
-    range: [0, 10],
-  },
-  {
-    id: "enhancing",
-    title: "Menjernihkan gambar - 10-25%",
-    description: "Menjernihkan gambar untuk dibaca...",
-    range: [10, 25],
-  },
-  {
-    id: "ocr",
-    title: "Membaca teks (OCR) - 25-55%",
-    description: "Membaca teks pada struk...",
-    range: [25, 55],
-  },
-  {
-    id: "interpreting",
-    title: "Menafsirkan & mengekstrak - 55-75%",
-    description: "Menata item dan total belanja...",
-    range: [55, 75],
-  },
-  {
-    id: "validating",
-    title: "Memeriksa & melengkapi - 75-85%",
-    description: "Memeriksa konsistensi data...",
-    range: [75, 85],
-  },
-  {
-    id: "persisting",
-    title: "Menyimpan ke akun - 85-95%",
-    description: "Menyimpan ke akun kamu...",
-    range: [85, 95],
-  },
-  {
-    id: "done",
-    title: "Selesai - 95-100%",
-    description: "Berhasil! Struk tersimpan.",
-    range: [95, 100],
-  },
-];
+    {
+      id: "uploading",
+      title: "Mengunggah struk",
+      description: "Mengunggah struk ke server dengan koneksi aman.",
+      range: [0, 10],
+    },
+    {
+      id: "enhancing",
+      title: "Menjernihkan gambar",
+      description: "Membersihkan citra agar teks lebih mudah dibaca.",
+      range: [10, 25],
+    },
+    {
+      id: "ocr",
+      title: "Membaca teks (OCR)",
+      description: "Menjalankan mesin OCR untuk mengambil detail struk.",
+      range: [25, 55],
+    },
+    {
+      id: "interpreting",
+      title: "Menganalisis isi struk",
+      description: "Menafsirkan item, harga, dan total belanja.",
+      range: [55, 75],
+    },
+    {
+      id: "validating",
+      title: "Memeriksa hasil",
+      description: "Memastikan angka dan format transaksi konsisten.",
+      range: [75, 85],
+    },
+    {
+      id: "persisting",
+      title: "Menyimpan ke akun",
+      description: "Menyimpan struk dan transaksi ke akun kamu.",
+      range: [85, 95],
+    },
+    {
+      id: "done",
+      title: "Berhasil disimpan",
+      description: "Struk selesai diproses dan siap ditinjau.",
+      range: [95, 100],
+    },
+  ];
 
 const ERROR_COPY_BY_STAGE: Record<ReceiptProgressStage | "unknown", string> = {
   uploading: "Unggahan gagal. Periksa koneksi dan coba lagi.",
@@ -118,6 +147,10 @@ function clampPercent(value: number | null | undefined): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+function formatStageRange([start, end]: [number, number]): string {
+  return `${start}-${end}%`;
+}
+
 function normalizeProgressDetail(payload: unknown): ProgressDetail | null {
   if (!payload || typeof payload !== "object") {
     return null;
@@ -140,6 +173,41 @@ function normalizeProgressDetail(payload: unknown): ProgressDetail | null {
   }
 
   return Object.keys(detail).length > 0 ? detail : null;
+}
+
+function formatMinorForInput(minor: number | null | undefined, currency: string): string {
+  if (minor === null || minor === undefined) {
+    return "";
+  }
+  if (!Number.isFinite(minor)) {
+    return "";
+  }
+  const decimals = getCurrencyDecimals(currency);
+  const factor = 10 ** decimals;
+  const normalized = minor / factor;
+  return normalized.toFixed(decimals);
+}
+
+function resolveCurrencyStep(currency: string): string {
+  const decimals = getCurrencyDecimals(currency);
+  if (decimals <= 0) {
+    return "1";
+  }
+  return `0.${"0".repeat(Math.max(0, decimals - 1))}1`;
+}
+
+function toMinorFromInput(value: string, currency: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  const normalized = Number.parseFloat(trimmed.replace(/,/g, "."));
+  if (!Number.isFinite(normalized)) {
+    return null;
+  }
+  const decimals = getCurrencyDecimals(currency);
+  const factor = 10 ** decimals;
+  return Math.round(normalized * factor);
 }
 
 type ReceiptProgressStage =
@@ -177,26 +245,27 @@ type JobStatusSnapshot = {
   errorMessage: string | null;
   errorCode: string | null;
   sourceFilename: string | null;
+  storagePath: string | null;
   progressStage: ReceiptProgressStage | null;
   progressMessage: string | null;
   progressValue: number | null;
   progressDetail: ProgressDetail | null;
   receipt:
-    | {
-        id: string;
-        merchantName: string;
-        merchantAddress: string | null;
-        currency: string;
-        totalMinor: number;
-        subtotalMinor: number | null;
-        taxMinor: number | null;
-        discountMinor: number | null;
-        purchaseAt: string | null;
-        paymentMethod: string | null;
-        confidence: number | null;
-        warnings: string[];
-      }
-    | null;
+  | {
+    id: string;
+    merchantName: string;
+    merchantAddress: string | null;
+    currency: string;
+    totalMinor: number;
+    subtotalMinor: number | null;
+    taxMinor: number | null;
+    discountMinor: number | null;
+    purchaseAt: string | null;
+    paymentMethod: string | null;
+    confidence: number | null;
+    warnings: string[];
+  }
+  | null;
 };
 
 type JobStatusResponse = {
@@ -218,6 +287,20 @@ type JobStatusResponse = {
   };
   receipt?: JobStatusSnapshot["receipt"];
 };
+
+type ReceiptDraft = {
+  merchantName: string;
+  purchaseDate: string;
+  paymentMethod: string;
+  currency: string;
+  total: string;
+  subtotal: string;
+  tax: string;
+  discount: string;
+  notes: string;
+};
+
+type ProcessingMode = "enhanced" | "direct";
 
 type UploadReceiptAccountOption = {
   id: string;
@@ -241,6 +324,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const [isProgressVisible, setIsProgressVisible] = useState(false);
   const [transientNotice, setTransientNotice] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [storagePreviewUrl, setStoragePreviewUrl] = useState<string | null>(null);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -249,10 +333,126 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const pollRetryRef = useRef(0);
   const lastProgressStageRef = useRef<ReceiptProgressStage>("uploading");
   const [isCapturing, setIsCapturing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const dragCounterRef = useRef(0);
+  const [isDragActive, setIsDragActive] = useState(false);
+  const [receiptDraft, setReceiptDraft] = useState<ReceiptDraft | null>(null);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>("enhanced");
+  const [displayStageIndex, setDisplayStageIndex] = useState(0);
+  const stageAdvanceTimeoutRef = useRef<number | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const [createState, createTransactionFormAction] = useActionState(createTransactionAction, initialActionState);
   const accountMap = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
   const hasAccounts = accounts.length > 0;
+  const openFilePicker = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const clearStageAdvanceTimer = useCallback(() => {
+    if (stageAdvanceTimeoutRef.current) {
+      window.clearTimeout(stageAdvanceTimeoutRef.current);
+      stageAdvanceTimeoutRef.current = null;
+    }
+  }, []);
+
+  const handleFileSelection = useCallback(
+    (selectedFile: File | null) => {
+      if (!selectedFile) {
+        setFile(null);
+        setPreviewUrl(null);
+        return;
+      }
+
+      if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
+        toast({
+          title: "File terlalu besar",
+          description: "Ukuran maksimum 10MB per struk.",
+          variant: "error",
+        });
+        return;
+      }
+
+      if (selectedFile.type && !ACCEPTED_MIME_TYPES.includes(selectedFile.type)) {
+        toast({
+          title: "Format tidak didukung",
+          description: "Gunakan JPG, PNG, WEBP, HEIC, HEIF, atau TIFF.",
+          variant: "error",
+        });
+        return;
+      }
+
+      setFile(selectedFile);
+      setState({ status: "idle" });
+      setJobStatus(null);
+      setActiveJobId(null);
+      setStoragePreviewUrl(null);
+      setReceiptDraft(null);
+      setTransientNotice(null);
+      setIsProgressVisible(false);
+      setIsCreateDialogOpen(false);
+      setIsCreatingTransaction(false);
+      clearStageAdvanceTimer();
+      setDisplayStageIndex(0);
+    },
+    [clearStageAdvanceTimer, setState, toast],
+  );
+
+  const handleDrop = useCallback(
+    (event: DragEvent<HTMLDivElement>) => {
+      event.preventDefault();
+      event.stopPropagation();
+      dragCounterRef.current = 0;
+      setIsDragActive(false);
+      const droppedFile = event.dataTransfer.files?.[0] ?? null;
+      if (droppedFile) {
+        handleFileSelection(droppedFile);
+      }
+      event.dataTransfer.clearData();
+    },
+    [handleFileSelection],
+  );
+
+  const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
+  const handleDragEnter = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounterRef.current += 1;
+    setIsDragActive(true);
+  }, []);
+
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragCounterRef.current = Math.max(0, dragCounterRef.current - 1);
+    if (dragCounterRef.current === 0) {
+      setIsDragActive(false);
+    }
+  }, []);
+
+  const handleDropzoneKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openFilePicker();
+    }
+  }, [openFilePicker]);
+
+  const handleDraftChange = useCallback((key: keyof ReceiptDraft, value: string) => {
+    setReceiptDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
+  }, []);
+
+  const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
+    setIsCreateDialogOpen(nextOpen);
+    if (!nextOpen) {
+      setIsCreatingTransaction(false);
+    }
+  }, []);
   const handleResetAfterSuccess = useCallback(() => {
     setState({ status: "idle" });
     setJobStatus(null);
@@ -260,8 +460,14 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     setActiveJobId(null);
     setIsProgressVisible(false);
     setTransientNotice(null);
+    setReceiptDraft(null);
+    setStoragePreviewUrl(null);
+    setPreviewUrl(null);
+    setIsCreateDialogOpen(false);
     lastProgressStageRef.current = "uploading";
-  }, [setActiveJobId, setFile, setIsProgressVisible, setJobStatus, setState]);
+    clearStageAdvanceTimer();
+    setDisplayStageIndex(0);
+  }, [clearStageAdvanceTimer, setActiveJobId, setFile, setIsProgressVisible, setJobStatus, setPreviewUrl, setReceiptDraft, setState]);
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -289,7 +495,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     }
     const resolvedAccount = accountId ? accountMap.get(accountId) ?? null : accounts[0] ?? null;
     if (resolvedAccount?.currency) {
-  setCurrency(resolvedAccount.currency);
+      setCurrency(resolvedAccount.currency);
     }
   }, [accountId, accountMap, accounts, hasAccounts]);
 
@@ -319,6 +525,108 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     }
     return lastProgressStageRef.current ?? "uploading";
   }, [jobStatus?.progressStage, state.status]);
+
+  const { targetStageIndex, stageStepDelay } = useMemo(() => {
+    let target = displayStageIndex;
+    let delay = AUTO_STAGE_STEP_MS;
+
+    if (activeProgressStage === "failed") {
+      const failureStageId = failingStage ?? lastProgressStageRef.current ?? "uploading";
+      const failureIndex = PROGRESS_STAGE_ORDER.indexOf(failureStageId);
+      target = failureIndex >= 0 ? failureIndex : 0;
+      delay = 0;
+      return { targetStageIndex: target, stageStepDelay: delay };
+    }
+
+    if (state.status === "success" || activeProgressStage === "done") {
+      target = PROGRESS_STAGE_ORDER.length - 1;
+      delay = CATCHUP_STAGE_STEP_MS;
+      return { targetStageIndex: target, stageStepDelay: delay };
+    }
+
+    const reportedStage =
+      jobStatus?.progressStage && jobStatus.progressStage !== "failed"
+        ? jobStatus.progressStage
+        : null;
+
+    if (reportedStage) {
+      const reportedIndex = PROGRESS_STAGE_ORDER.indexOf(reportedStage);
+      if (reportedIndex >= 0) {
+        target = Math.max(reportedIndex, displayStageIndex);
+        delay = reportedIndex > displayStageIndex ? CATCHUP_STAGE_STEP_MS : 0;
+        return { targetStageIndex: target, stageStepDelay: delay };
+      }
+    }
+
+    if (state.status === "tracking") {
+      target = Math.min(displayStageIndex + 1, PROGRESS_STAGE_ORDER.length - 2);
+      delay = AUTO_STAGE_STEP_MS;
+      return { targetStageIndex: target, stageStepDelay: delay };
+    }
+
+    if (state.status === "uploading") {
+      target = 0;
+      delay = 0;
+    }
+
+    return { targetStageIndex: target, stageStepDelay: delay };
+  }, [
+    activeProgressStage,
+    displayStageIndex,
+    failingStage,
+    jobStatus?.progressStage,
+    state.status,
+  ]);
+
+  useEffect(() => {
+    if (targetStageIndex === displayStageIndex) {
+      clearStageAdvanceTimer();
+      return;
+    }
+
+    if (targetStageIndex < displayStageIndex) {
+      clearStageAdvanceTimer();
+      setDisplayStageIndex(targetStageIndex);
+      return;
+    }
+
+    const nextDelay = targetStageIndex - displayStageIndex > 1 ? CATCHUP_STAGE_STEP_MS : stageStepDelay;
+
+    clearStageAdvanceTimer();
+    stageAdvanceTimeoutRef.current = window.setTimeout(() => {
+      stageAdvanceTimeoutRef.current = null;
+      setDisplayStageIndex((current) => {
+        if (targetStageIndex <= current) {
+          return targetStageIndex;
+        }
+        return Math.min(current + 1, targetStageIndex);
+      });
+    }, nextDelay);
+
+    return () => {
+      clearStageAdvanceTimer();
+    };
+  }, [
+    clearStageAdvanceTimer,
+    displayStageIndex,
+    stageStepDelay,
+    targetStageIndex,
+  ]);
+
+  const displayStageId = useMemo(() => {
+    const boundedIndex = Math.min(
+      Math.max(displayStageIndex, 0),
+      PROGRESS_STAGE_ORDER.length - 1,
+    );
+    return PROGRESS_STAGE_ORDER[boundedIndex] ?? "uploading";
+  }, [displayStageIndex]);
+
+  const displayStep = useMemo(() => {
+    if (activeProgressStage === "failed" && failingStage) {
+      return PROGRESS_STEPS.find((step) => step.id === failingStage) ?? PROGRESS_STEPS[0];
+    }
+    return PROGRESS_STEPS.find((step) => step.id === displayStageId) ?? PROGRESS_STEPS[0];
+  }, [activeProgressStage, displayStageId, failingStage]);
 
   const progressPercent = useMemo(() => {
     if (state.status === "success") {
