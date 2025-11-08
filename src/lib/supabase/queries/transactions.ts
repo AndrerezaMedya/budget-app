@@ -134,11 +134,19 @@ export async function fetchTransactionSummary(
   } satisfies TransactionSummary;
 }
 
+type RecentTransactionOptions = {
+  limit?: number;
+  startDate?: string;
+  endDate?: string;
+};
+
 export async function fetchRecentTransactions(
-  limit = 20,
+  options: RecentTransactionOptions = {},
 ): Promise<HydratedTransaction[]> {
   const supabase = await createSupabaseServerComponentClient();
-  const { data, error } = await supabase
+  const limit = options.limit ?? 20;
+
+  let query = supabase
     .from("transactions")
     .select(
       `id, account_id, description, occurred_at, amount_minor, currency, type, transfer_direction, created_at,
@@ -147,6 +155,16 @@ export async function fetchRecentTransactions(
     )
     .order("occurred_at", { ascending: false })
     .limit(limit);
+
+  if (options.startDate) {
+    query = query.gte("occurred_at", options.startDate);
+  }
+
+  if (options.endDate) {
+    query = query.lt("occurred_at", options.endDate);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(`Failed to load transactions: ${error.message}`);
