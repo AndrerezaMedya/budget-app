@@ -635,24 +635,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     if (jobStatus?.progressValue != null) {
       return clampPercent(jobStatus.progressValue);
     }
-    if (state.status === "uploading") {
-      return clampPercent(8);
-    }
-    if (state.status === "tracking") {
-      return clampPercent(12);
-    }
     if (state.status === "error") {
       return 100;
     }
-    return 0;
-  }, [jobStatus?.progressValue, state.status]);
-
-  const activeStep = useMemo(() => {
-    if (activeProgressStage === "failed" && failingStage) {
-      return PROGRESS_STEPS.find((step) => step.id === failingStage) ?? PROGRESS_STEPS[0];
+    const step = PROGRESS_STEPS.find((candidate) => candidate.id === displayStageId);
+    if (step) {
+      const [min, max] = step.range;
+      const midpoint = min + (max - min) / 2;
+      return clampPercent(Math.round(midpoint));
     }
-    return PROGRESS_STEPS.find((step) => step.id === activeProgressStage) ?? PROGRESS_STEPS[0];
-  }, [activeProgressStage, failingStage]);
+    return 0;
+  }, [displayStageId, jobStatus?.progressValue, state.status]);
 
   const stageMessage = useMemo(() => {
     if (activeProgressStage === "failed") {
@@ -662,8 +655,8 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     if (transientNotice) {
       return transientNotice;
     }
-    return jobStatus?.progressMessage ?? activeStep?.description ?? "";
-  }, [activeProgressStage, activeStep, failingStage, jobStatus?.progressMessage, transientNotice]);
+    return jobStatus?.progressMessage ?? displayStep?.description ?? "";
+  }, [activeProgressStage, displayStep, failingStage, jobStatus?.progressMessage, transientNotice]);
 
   const stageState = useCallback(
     (stageId: ReceiptProgressStage): "done" | "active" | "upcoming" | "failed" => {
@@ -686,37 +679,20 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           return "failed";
         }
 
-        if (stageId === "done" && failStageId === "done" && state.status === "success") {
-          return "done";
-        }
-
         return "upcoming";
       }
 
-      const activeIndex = PROGRESS_STAGE_ORDER.indexOf(activeProgressStage);
-
-      if (activeIndex === -1) {
-        return "upcoming";
-      }
-
-      if (resolvedStageIndex < activeIndex) {
+      if (resolvedStageIndex < displayStageIndex) {
         return "done";
       }
 
-      if (resolvedStageIndex === activeIndex) {
-        if (stageId === "done") {
-          return state.status === "success" ? "done" : "active";
-        }
-        return "active";
+      if (resolvedStageIndex === displayStageIndex) {
+        return state.status === "success" && stageId === "done" ? "done" : "active";
       }
 
-      if (stageId === "done" && activeProgressStage === "done") {
-        return "done";
-      }
-
-      return "upcoming";
+      return stageId === "done" && activeProgressStage === "done" ? "done" : "upcoming";
     },
-    [activeProgressStage, failingStage, state.status],
+    [activeProgressStage, displayStageIndex, failingStage, state.status],
   );
 
   const ocrConfidence = jobStatus?.progressDetail?.ocr?.confidence;
@@ -726,6 +702,25 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     && ocrConfidence > 0
     && ocrConfidence < 60
     && activeProgressStage !== "failed";
+
+  const previewImageUrl = previewUrl ?? storagePreviewUrl;
+  const dropzoneClasses = `${DROPZONE_BASE_CLASSES} ${isDragActive ? "border-primary/80 bg-primary/10 shadow-sm" : "hover:border-primary/60 hover:bg-primary/5"}`;
+  const receiptResult = jobStatus?.receipt ?? null;
+  const receiptConfidenceLabel =
+    typeof receiptResult?.confidence === "number" && Number.isFinite(receiptResult.confidence)
+      ? `${Math.round(receiptResult.confidence * 100)}%`
+      : null;
+  const hasReceiptResult = Boolean(receiptDraft && receiptResult);
+  const reviewWarnings = receiptResult?.warnings ?? [];
+  const receiptCurrencyStep = resolveCurrencyStep(receiptDraft?.currency ?? currency);
+  const canCreateTransaction = Boolean(receiptDraft && receiptDraft.total && accountId);
+  const previewTotalMinor = receiptDraft?.total ? toMinorFromInput(receiptDraft.total, receiptDraft.currency) : null;
+  const previewSubtotalMinor = receiptDraft?.subtotal ? toMinorFromInput(receiptDraft.subtotal, receiptDraft.currency) : null;
+  const previewTaxMinor = receiptDraft?.tax ? toMinorFromInput(receiptDraft.tax, receiptDraft.currency) : null;
+  const previewDiscountMinor = receiptDraft?.discount ? toMinorFromInput(receiptDraft.discount, receiptDraft.currency) : null;
+  const defaultDialogAccountId = accountId || accounts[0]?.id || "";
+  const defaultOccurredAt = receiptDraft?.purchaseDate || new Date().toISOString().slice(0, 10);
+  const defaultDescription = receiptDraft?.merchantName ?? "";
 
   useEffect(() => {
     if (!file) {
@@ -738,6 +733,85 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       URL.revokeObjectURL(objectUrl);
     };
   }, [file]);
+
+  useEffect(() => {
+    if (!jobStatus?.storagePath) {
+      setStoragePreviewUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+    const supabase = getSupabaseBrowserClient();
+
+    supabase.storage
+      .from("receipts")
+      .createSignedUrl(jobStatus.storagePath, 60 * 60)
+      .then((result) => {
+        if (cancelled) {
+          return;
+        }
+        const signed = result.data?.signedUrl ?? null;
+        setStoragePreviewUrl(signed);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStoragePreviewUrl(null);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobStatus?.storagePath]);
+
+  useEffect(() => {
+    if (!jobStatus?.receipt) {
+      setReceiptDraft(null);
+      return;
+    }
+
+    const receipt = jobStatus.receipt;
+    const receiptCurrency = receipt.currency ?? currency;
+    setReceiptDraft({
+      merchantName: receipt.merchantName ?? "",
+      purchaseDate: receipt.purchaseAt ? receipt.purchaseAt.slice(0, 10) : "",
+      paymentMethod: receipt.paymentMethod ?? "",
+      currency: receiptCurrency,
+      total: formatMinorForInput(receipt.totalMinor, receiptCurrency),
+      subtotal: formatMinorForInput(receipt.subtotalMinor, receiptCurrency),
+      tax: formatMinorForInput(receipt.taxMinor, receiptCurrency),
+      discount: formatMinorForInput(receipt.discountMinor, receiptCurrency),
+      notes: receipt.warnings.length > 0 ? receipt.warnings.join("; ") : "",
+    });
+  }, [currency, jobStatus?.receipt]);
+
+  useEffect(() => {
+    if (createState.status === "idle") {
+      return;
+    }
+
+    if (createState.status === "success") {
+      toast({
+        title: "Transaksi dibuat",
+        description: createState.message ?? "Transaksi dari struk berhasil ditambahkan.",
+        variant: "success",
+      });
+      setIsCreatingTransaction(false);
+      setIsCreateDialogOpen(false);
+      handleResetAfterSuccess();
+      router.push("/app/transactions");
+      return;
+    }
+
+    if (createState.status === "error") {
+      toast({
+        title: "Gagal membuat transaksi",
+        description: createState.message ?? "Periksa kembali data transaksi.",
+        variant: "error",
+      });
+      setIsCreatingTransaction(false);
+    }
+  }, [createState.message, createState.status, handleResetAfterSuccess, router, toast]);
 
   useEffect(() => {
     if (state.status === "uploading" || state.status === "tracking") {
@@ -899,10 +973,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     try {
       const blob = await canvasToBlob(canvas);
       const capturedFile = new File([blob], `receipt-${Date.now()}.jpg`, { type: blob.type });
-      setFile(capturedFile);
-      setState({ status: "idle" });
-      setActiveJobId(null);
-      setJobStatus(null);
+      handleFileSelection(capturedFile);
       handleCloseCamera();
       toast({
         title: "Foto ditangkap",
@@ -920,7 +991,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     } finally {
       setIsCapturing(false);
     }
-  }, [canvasToBlob, handleCloseCamera, toast]);
+  }, [canvasToBlob, handleCloseCamera, handleFileSelection, toast]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -947,6 +1018,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     formData.append("accountId", accountId);
     formData.append("currency", currency.toUpperCase());
     formData.append("locale", locale);
+  formData.append("mode", processingMode);
 
     setState({ status: "uploading" });
     setJobStatus(null);
@@ -954,6 +1026,8 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     setTransientNotice(null);
     pollRetryRef.current = 0;
     lastProgressStageRef.current = "uploading";
+    clearStageAdvanceTimer();
+    setDisplayStageIndex(0);
     setIsProgressVisible(true);
 
     try {
@@ -1031,6 +1105,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           errorMessage: payload.job.errorMessage ?? null,
           errorCode: payload.job.errorCode ?? null,
           sourceFilename: payload.job.sourceFilename ?? null,
+          storagePath: typeof payload.job.storagePath === "string" ? payload.job.storagePath : null,
           progressStage: normalizeProgressStage(payload.job.progressStage),
           progressMessage: typeof payload.job.progressMessage === "string" ? payload.job.progressMessage : null,
           progressValue: (() => {
@@ -1145,20 +1220,48 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         <div className="space-y-2">
           <Label htmlFor="receipt-file">Gambar struk</Label>
           <Input
+            ref={fileInputRef}
             id="receipt-file"
             type="file"
             accept={ACCEPTED_MIME_TYPES.join(",")}
-            onChange={(event) => {
-              const selectedFile = event.currentTarget.files?.[0] ?? null;
-              setFile(selectedFile);
-              setState({ status: "idle" });
-            }}
-            required
+            className="sr-only"
+            onChange={(event) => handleFileSelection(event.currentTarget.files?.[0] ?? null)}
           />
-          <p className="text-xs text-muted-foreground">
-            Format yang didukung: JPG, PNG, WEBP, HEIC, HEIF, TIFF (maks 10MB).
-          </p>
-          <div className="pt-1">
+          <div
+            className={dropzoneClasses}
+            role="button"
+            tabIndex={0}
+            onClick={openFilePicker}
+            onKeyDown={handleDropzoneKeyDown}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            aria-describedby="receipt-dropzone-help"
+          >
+            {previewImageUrl ? (
+              <div className="w-full max-w-md overflow-hidden rounded-md border border-border/60 bg-background/60">
+                <img src={previewImageUrl} alt="Preview struk" className="h-56 w-full object-cover" />
+              </div>
+            ) : (
+              <div className="space-y-2 text-muted-foreground">
+                <p className="text-base font-semibold text-foreground">Tarik & lepas struk di sini</p>
+                <p className="text-xs">atau klik untuk pilih dari perangkat</p>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {file
+                ? `Dipilih: ${file.name}`
+                : jobStatus?.sourceFilename
+                  ? `Terakhir diunggah: ${jobStatus.sourceFilename}`
+                  : "Format: JPG, PNG, WEBP, HEIC, HEIF, TIFF • Maks 10MB"}
+            </p>
+          </div>
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-muted-foreground"
+            id="receipt-dropzone-help"
+          >
+            <span>Tarik file atau klik area di atas untuk memilih gambar struk.</span>
             <Button
               type="button"
               variant="outline"
@@ -1168,7 +1271,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                 setCameraError(null);
               }}
             >
-              Scan langsung dari kamera
+              Scan dari kamera
             </Button>
           </div>
         </div>
@@ -1234,6 +1337,50 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           />
         </div>
 
+        <div className="space-y-2">
+          <Label>Metode pemrosesan</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <label
+              className={`flex cursor-pointer flex-col rounded-md border p-3 text-sm transition-colors ${processingMode === "enhanced" ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="processing-mode"
+                  value="enhanced"
+                  checked={processingMode === "enhanced"}
+                  onChange={() => setProcessingMode("enhanced")}
+                  disabled={isBusy}
+                  className="h-4 w-4 border-input text-primary focus:outline-none"
+                />
+                <span className="font-medium text-foreground">Disempurnakan (disarankan)</span>
+              </div>
+              <span className="mt-1 text-xs text-muted-foreground">
+                Membersihkan gambar dan menjalankan OCR sebelum dikirim ke LLM.
+              </span>
+            </label>
+            <label
+              className={`flex cursor-pointer flex-col rounded-md border p-3 text-sm transition-colors ${processingMode === "direct" ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
+            >
+              <div className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="processing-mode"
+                  value="direct"
+                  checked={processingMode === "direct"}
+                  onChange={() => setProcessingMode("direct")}
+                  disabled={isBusy}
+                  className="h-4 w-4 border-input text-primary focus:outline-none"
+                />
+                <span className="font-medium text-foreground">Langsung ke LLM</span>
+              </div>
+              <span className="mt-1 text-xs text-muted-foreground">
+                Melewati preprocessing dan OCR; cocok untuk percobaan cepat.
+              </span>
+            </label>
+          </div>
+        </div>
+
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={isBusy || !hasAccounts}>
@@ -1260,39 +1407,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               <p className="text-xs text-destructive">{state.message}</p>
             ) : null}
           </div>
-
-          {state.status === "success" && jobStatus?.receipt ? (
-            <div className="rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
-              <p className="text-sm font-medium text-foreground">{jobStatus.receipt.merchantName}</p>
-              <p className="mt-1 text-sm text-foreground">
-                {formatCurrency(jobStatus.receipt.totalMinor, jobStatus.receipt.currency)}
-              </p>
-              <div className="mt-2 flex flex-wrap gap-3">
-                {jobStatus.receipt.purchaseAt ? (
-                  <span>
-                    Tanggal: {formatDate(jobStatus.receipt.purchaseAt)}
-                  </span>
-                ) : null}
-                {jobStatus.receipt.paymentMethod ? (
-                  <span>Metode: {jobStatus.receipt.paymentMethod}</span>
-                ) : null}
-                {typeof jobStatus.receipt.confidence === "number" ? (
-                  <span>
-                    Keyakinan: {(jobStatus.receipt.confidence * 100).toFixed(0)}%
-                  </span>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
         </div>
-
-        {warnings.length > 0 ? (
-          <ul className="list-disc space-y-1 pl-5 text-xs text-amber-500">
-            {warnings.map((warning) => (
-              <li key={warning}>{warning}</li>
-            ))}
-          </ul>
-        ) : null}
 
         {isCameraOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur">
@@ -1345,11 +1460,295 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         ) : null}
       </form>
 
+      {hasReceiptResult ? (
+        <section className="mt-6 space-y-6 rounded-lg border border-border/70 bg-card/95 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Tinjau hasil scan</h2>
+              <p className="text-sm text-muted-foreground">Perbarui detail sebelum membuat transaksi.</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {receiptConfidenceLabel ? (
+                <span className="rounded-full border border-border/70 px-3 py-1">
+                  Akurasi OCR: {receiptConfidenceLabel}
+                </span>
+              ) : null}
+              {receiptResult?.id ? (
+                <span className="font-mono text-muted-foreground/80">#{receiptResult.id.slice(0, 8)}</span>
+              ) : null}
+            </div>
+          </div>
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <div className="space-y-4">
+              <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/20">
+                {previewImageUrl ? (
+                  <img src={previewImageUrl} alt="Hasil foto struk" className="w-full max-h-[420px] object-cover" />
+                ) : (
+                  <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                    Preview tidak tersedia. Unggah ulang untuk melihat gambar.
+                  </div>
+                )}
+              </div>
+              {reviewWarnings.length > 0 ? (
+                <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-200">
+                  <p className="text-sm font-medium">Catatan sistem</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-4">
+                    {reviewWarnings.map((warning) => (
+                      <li key={warning}>{warning}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-4">
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-merchant">Nama toko</Label>
+                  <Input
+                    id="receipt-merchant"
+                    value={receiptDraft?.merchantName ?? ""}
+                    onChange={(event) => handleDraftChange("merchantName", event.target.value)}
+                    placeholder="Nama merchant"
+                    disabled={isCreatingTransaction}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-date">Tanggal</Label>
+                  <Input
+                    id="receipt-date"
+                    type="date"
+                    value={receiptDraft?.purchaseDate ?? ""}
+                    onChange={(event) => handleDraftChange("purchaseDate", event.target.value)}
+                    disabled={isCreatingTransaction}
+                    max={new Date().toISOString().slice(0, 10)}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-currency-preview">Mata uang</Label>
+                  <select
+                    id="receipt-currency-preview"
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    value={receiptDraft?.currency ?? ""}
+                    onChange={(event) => handleDraftChange("currency", event.target.value)}
+                    disabled={isCreatingTransaction}
+                  >
+                    {ACCOUNT_CURRENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-payment">Metode bayar</Label>
+                  <Input
+                    id="receipt-payment"
+                    value={receiptDraft?.paymentMethod ?? ""}
+                    onChange={(event) => handleDraftChange("paymentMethod", event.target.value)}
+                    placeholder="Contoh: Tunai / Kartu"
+                    disabled={isCreatingTransaction}
+                  />
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-total">Total</Label>
+                  <Input
+                    id="receipt-total"
+                    inputMode="decimal"
+                    step={receiptCurrencyStep}
+                    value={receiptDraft?.total ?? ""}
+                    onChange={(event) => handleDraftChange("total", event.target.value)}
+                    disabled={isCreatingTransaction}
+                  />
+                  {receiptDraft?.currency && previewTotalMinor !== null ? (
+                    <p className="text-xs text-muted-foreground">
+                      ≈ {formatCurrency(previewTotalMinor, receiptDraft.currency)}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-subtotal">Subtotal</Label>
+                  <Input
+                    id="receipt-subtotal"
+                    inputMode="decimal"
+                    step={receiptCurrencyStep}
+                    value={receiptDraft?.subtotal ?? ""}
+                    onChange={(event) => handleDraftChange("subtotal", event.target.value)}
+                    disabled={isCreatingTransaction}
+                  />
+                  {receiptDraft?.currency && previewSubtotalMinor !== null ? (
+                    <p className="text-xs text-muted-foreground">
+                      ≈ {formatCurrency(previewSubtotalMinor, receiptDraft.currency)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-tax">Pajak</Label>
+                  <Input
+                    id="receipt-tax"
+                    inputMode="decimal"
+                    step={receiptCurrencyStep}
+                    value={receiptDraft?.tax ?? ""}
+                    onChange={(event) => handleDraftChange("tax", event.target.value)}
+                    disabled={isCreatingTransaction}
+                  />
+                  {receiptDraft?.currency && previewTaxMinor !== null ? (
+                    <p className="text-xs text-muted-foreground">
+                      ≈ {formatCurrency(previewTaxMinor, receiptDraft.currency)}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-discount">Diskon</Label>
+                  <Input
+                    id="receipt-discount"
+                    inputMode="decimal"
+                    step={receiptCurrencyStep}
+                    value={receiptDraft?.discount ?? ""}
+                    onChange={(event) => handleDraftChange("discount", event.target.value)}
+                    disabled={isCreatingTransaction}
+                  />
+                  {receiptDraft?.currency && previewDiscountMinor !== null ? (
+                    <p className="text-xs text-muted-foreground">
+                      ≈ {formatCurrency(previewDiscountMinor, receiptDraft.currency)}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="receipt-notes">Catatan</Label>
+                <textarea
+                  id="receipt-notes"
+                  className={TEXTAREA_BASE_CLASSES}
+                  value={receiptDraft?.notes ?? ""}
+                  onChange={(event) => handleDraftChange("notes", event.target.value)}
+                  placeholder="Catatan tambahan (opsional)"
+                  disabled={isCreatingTransaction}
+                />
+              </div>
+              <div className="flex flex-wrap justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleResetAfterSuccess()}
+                  disabled={isCreatingTransaction}
+                >
+                  Unggah struk baru
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setIsCreateDialogOpen(true);
+                    setIsCreatingTransaction(false);
+                  }}
+                  disabled={!canCreateTransaction || isCreatingTransaction}
+                >
+                  {isCreatingTransaction ? "Menyimpan..." : "Buat transaksi"}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
+        <DialogContent className="max-w-lg space-y-4">
+          <DialogHeader>
+            <DialogTitle>Buat transaksi dari struk</DialogTitle>
+          </DialogHeader>
+          <form
+            action={createTransactionFormAction}
+            className="space-y-4"
+            onSubmit={() => setIsCreatingTransaction(true)}
+          >
+            <input type="hidden" name="type" value="expense" />
+            <div className="space-y-2">
+              <Label htmlFor="receipt-dialog-account">Akun</Label>
+              <select
+                id="receipt-dialog-account"
+                name="accountId"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                defaultValue={defaultDialogAccountId}
+                required
+                disabled={isCreatingTransaction}
+              >
+                <option value="" disabled>
+                  Pilih akun pembayaran
+                </option>
+                {accounts.map((accountOption) => (
+                  <option key={accountOption.id} value={accountOption.id}>
+                    {accountOption.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-dialog-amount">Jumlah</Label>
+              <Input
+                id="receipt-dialog-amount"
+                name="amount"
+                inputMode="decimal"
+                step={receiptCurrencyStep}
+                defaultValue={receiptDraft?.total ?? ""}
+                required
+                disabled={isCreatingTransaction}
+              />
+              {receiptDraft?.currency && previewTotalMinor !== null ? (
+                <p className="text-xs text-muted-foreground">
+                  {formatCurrency(previewTotalMinor, receiptDraft.currency)}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-dialog-date">Tanggal</Label>
+              <Input
+                id="receipt-dialog-date"
+                name="occurredAt"
+                type="date"
+                defaultValue={defaultOccurredAt}
+                required
+                disabled={isCreatingTransaction}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="receipt-dialog-description">Deskripsi</Label>
+              <Input
+                id="receipt-dialog-description"
+                name="description"
+                defaultValue={defaultDescription}
+                placeholder="Judul transaksi"
+                disabled={isCreatingTransaction}
+              />
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost" disabled={isCreatingTransaction}>
+                  Batal
+                </Button>
+              </DialogClose>
+              <Button type="submit" disabled={isCreatingTransaction || !canCreateTransaction}>
+                {isCreatingTransaction ? "Menyimpan..." : "Simpan transaksi"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {isProgressVisible ? (
         <div className="fixed bottom-6 right-6 z-50 w-80 max-w-full animate-in fade-in slide-in-from-bottom-2">
           <div className="rounded-lg border border-border/60 bg-background p-4 shadow-xl">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-foreground">{activeStep?.title}</p>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex flex-col">
+                <p className="text-sm font-semibold text-foreground">{displayStep?.title ?? "Memproses struk"}</p>
+                {displayStep ? (
+                  <span className="text-[11px] text-muted-foreground">{formatStageRange(displayStep.range)}</span>
+                ) : null}
+              </div>
               <span className="text-xs text-muted-foreground">{progressPercent}%</span>
             </div>
             <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -1364,9 +1763,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                 Gambar kurang jelas. Coba foto struk di tempat terang.
               </p>
             ) : null}
-            {previewUrl ? (
+            {previewImageUrl ? (
               <div className="mt-3 overflow-hidden rounded-md border border-border/60 bg-muted/50">
-                <img src={previewUrl} alt="Preview struk" className="h-24 w-full object-cover" />
+                <img src={previewImageUrl} alt="Preview struk" className="h-24 w-full object-cover" />
               </div>
             ) : null}
             <ul className="mt-3 space-y-1 text-xs">
@@ -1389,9 +1788,14 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                         ? "text-foreground"
                         : "text-muted-foreground";
                 return (
-                  <li key={step.id} className={`flex items-center gap-2 ${textClass}`}>
-                    <span className={`inline-flex h-2 w-2 rounded-full ${indicatorClass}`} />
-                    {step.title}
+                  <li key={step.id} className="flex items-start gap-2">
+                    <span className={`mt-1 inline-flex h-2 w-2 rounded-full ${indicatorClass}`} />
+                    <div className="flex flex-col">
+                      <span className={`text-xs font-medium ${textClass}`}>{step.title}</span>
+                      <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {formatStageRange(step.range)}
+                      </span>
+                    </div>
                   </li>
                 );
               })}
