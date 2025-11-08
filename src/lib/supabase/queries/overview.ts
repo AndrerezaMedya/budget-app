@@ -1,11 +1,10 @@
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchBudgetsWithSummary } from "@/lib/supabase/queries/budgets";
-import { fetchRecentTransactions, fetchTransactionSummary } from "@/lib/supabase/queries/transactions";
-
-function currentPeriodKey(date = new Date()): string {
-  const month = `${date.getMonth() + 1}`.padStart(2, "0");
-  return `${date.getFullYear()}-${month}`;
-}
+import {
+  fetchRecentTransactions,
+  fetchTransactionSummary,
+} from "@/lib/supabase/queries/transactions";
+import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
 
 export type OverviewSnapshot = {
   period: string;
@@ -20,17 +19,25 @@ export type OverviewSnapshot = {
   recentTransactions: number;
 };
 
-export async function fetchOverviewSnapshot(): Promise<OverviewSnapshot> {
-  const period = currentPeriodKey();
-  const periodStart = new Date();
-  periodStart.setUTCDate(1);
-  periodStart.setUTCHours(0, 0, 0, 0);
-  const periodEnd = new Date(periodStart);
-  periodEnd.setUTCMonth(periodEnd.getUTCMonth() + 1);
+export async function fetchOverviewSnapshot(periodOverride?: string): Promise<OverviewSnapshot> {
+  const defaultPeriod = getCurrentPeriodKey();
+  let effectivePeriod = periodOverride ?? defaultPeriod;
+
+  let periodRange = getPeriodRange(effectivePeriod);
+  if (!periodRange) {
+    effectivePeriod = defaultPeriod;
+    periodRange = getPeriodRange(effectivePeriod);
+  }
+
+  if (!periodRange) {
+    throw new Error("Unable to compute period range for overview snapshot");
+  }
+
+  const { periodStart, periodEnd } = periodRange;
 
   const [accountsResult, budgets, transactionSummary] = await Promise.all([
     fetchAccounts(),
-    fetchBudgetsWithSummary(period),
+    fetchBudgetsWithSummary(effectivePeriod),
     fetchTransactionSummary({
       startDate: periodStart.toISOString(),
       endDate: periodEnd.toISOString(),
@@ -56,14 +63,20 @@ export async function fetchOverviewSnapshot(): Promise<OverviewSnapshot> {
   const averageExpensePerDayMinor =
     daysElapsed > 0 ? Math.round(totalExpenseMinor / daysElapsed) : 0;
 
-  const recentTransactions = (await fetchRecentTransactions(10)).length;
+  const recentTransactions = (
+    await fetchRecentTransactions({
+      limit: 10,
+      startDate: periodStart.toISOString(),
+      endDate: periodEnd.toISOString(),
+    })
+  ).length;
 
   return {
-    period,
+    period: effectivePeriod,
     totalIncomeMinor,
     totalExpenseMinor,
     netCashflowMinor,
-  totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
+    totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
     averageExpensePerDayMinor,
     activeAccounts: activeAccounts.length,
     activeBudgets: budgets.length,
