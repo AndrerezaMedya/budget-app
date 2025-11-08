@@ -1,11 +1,6 @@
+import { getCurrentPeriodKey } from "@/lib/period";
 import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
-
-const DEFAULT_PERIOD = (() => {
-  const now = new Date();
-  const month = `${now.getMonth() + 1}`.padStart(2, "0");
-  return `${now.getFullYear()}-${month}`;
-})();
 
 type SummaryRow = Database["public"]["Tables"]["category_monthly_summaries"]["Row"];
 type CategoryRow = Database["public"]["Tables"]["categories"]["Row"];
@@ -21,7 +16,7 @@ export type CategorySummary = {
 };
 
 export async function fetchCategorySummaries(
-  period = DEFAULT_PERIOD,
+  period = getCurrentPeriodKey(),
 ): Promise<CategorySummary[]> {
   const supabase = await createSupabaseServerComponentClient();
   const { data, error } = await supabase
