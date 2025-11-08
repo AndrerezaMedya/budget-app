@@ -13,6 +13,20 @@ import {
 } from "@/components/ui/card";
 import { BudgetActions } from "@/components/forms/budget-actions";
 import { CreateBudgetForm } from "@/components/forms/create-budget-form";
+import { formatPeriodLabel, getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+function getParamValue(params: SearchParams | undefined, key: string): string | undefined {
+  if (!params) {
+    return undefined;
+  }
+  const value = params[key];
+  if (Array.isArray(value)) {
+    return value[0];
+  }
+  return value ?? undefined;
+}
 
 function determineStatusDescriptor(
   plannedMinor: number,
@@ -39,13 +53,27 @@ function deriveProgressPercentage(plannedMinor: number, spentMinor: number) {
   return Math.min(100, Math.max(0, Math.round(ratio * 100)));
 }
 
-export default async function BudgetsPage() {
-  const { t } = await getTranslator();
-  const budgets = await fetchBudgetsWithSummary();
+export default async function BudgetsPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  const { t, locale } = await getTranslator();
+  const defaultPeriodKey = getCurrentPeriodKey();
+  const requestedPeriod = getParamValue(searchParams, "period") ?? defaultPeriodKey;
+  let effectivePeriod = requestedPeriod;
+  if (!getPeriodRange(effectivePeriod)) {
+    effectivePeriod = defaultPeriodKey;
+  }
+
+  if (!getPeriodRange(effectivePeriod)) {
+    throw new Error("Unable to determine period range for budgets");
+  }
+
+  const budgets = await fetchBudgetsWithSummary(effectivePeriod);
   const totalPlanned = budgets.reduce((sum, budget) => sum + budget.plannedMinor, 0);
   const totalSpent = budgets.reduce((sum, budget) => sum + budget.spentMinor, 0);
-  const now = new Date();
-  const defaultPeriod = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const periodLabel = formatPeriodLabel(effectivePeriod, locale);
 
   const translateKey = (key: string | null, fallback: string) =>
     key ? t(key as Parameters<typeof t>[0]) : fallback;
@@ -64,11 +92,14 @@ export default async function BudgetsPage() {
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{t("budgets.heading")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("budgets.subheading")}
-          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+            <p>{t("budgets.subheading")}</p>
+            <Badge variant="outline" className="bg-muted/40 text-xs uppercase tracking-wide">
+              {periodLabel}
+            </Badge>
+          </div>
         </div>
-  <CreateBudgetForm defaultPeriod={defaultPeriod} />
+  <CreateBudgetForm defaultPeriod={effectivePeriod} />
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
