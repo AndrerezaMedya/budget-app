@@ -1018,7 +1018,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     formData.append("accountId", accountId);
     formData.append("currency", currency.toUpperCase());
     formData.append("locale", locale);
-  formData.append("mode", processingMode);
+    formData.append("mode", processingMode);
 
     setState({ status: "uploading" });
     setJobStatus(null);
