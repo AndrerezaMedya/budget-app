@@ -11,7 +11,13 @@ import {
   Scan,
   Plus,
 } from "lucide-react";
-import * as React from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 import { APP_ROUTES } from "@/config/navigation";
 import { cn } from "@/lib/utils";
@@ -22,8 +28,8 @@ import { useI18n } from "@/components/providers/i18n-provider";
 import { PeriodSwitcher } from "@/components/dashboard";
 import { getCurrentPeriodKey } from "@/lib/period";
 
-export function AppShell({ children }: { children: React.ReactNode }) {
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+export function AppShell({ children }: { children: ReactNode }) {
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -33,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const periodParam = searchParams?.get("period");
   const currentPeriod = periodParam ?? getCurrentPeriodKey();
 
-  const quickActions = React.useMemo(
+  const quickActions = useMemo(
     () =>
       user
         ? [
@@ -63,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     [t, user],
   );
 
-  const fabAction = React.useMemo(() => {
+  const fabAction = useMemo(() => {
     if (!user) {
       return null;
     }
@@ -89,7 +95,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, t, user]);
 
-  const prefetchRoute = React.useCallback(
+  const prefetchRoute = useCallback(
     (href: string) => {
       if (!href) return;
       try {
@@ -101,7 +107,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     [router],
   );
 
-  const navigationTargets = React.useMemo(() => {
+  const navigationTargets = useMemo(() => {
     const targets = new Set<string>();
     APP_ROUTES.forEach((route) => targets.add(route.href));
     quickActions.forEach((action) => targets.add(action.href));
@@ -111,14 +117,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return Array.from(targets);
   }, [fabAction, quickActions]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!navigationTargets.length) {
       return;
     }
     navigationTargets.forEach((href) => prefetchRoute(href));
   }, [navigationTargets, prefetchRoute]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!loading && !user) {
       const fallback = "/app/overview";
       const target = pathname && pathname !== "/" ? pathname : fallback;
