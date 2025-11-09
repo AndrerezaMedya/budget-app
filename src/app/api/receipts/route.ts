@@ -356,8 +356,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Uploaded file is empty." }, { status: 400 });
     }
 
-    const { processed, original, metadata } = await preprocessReceiptImage(buffer);
-    const perceptualHash = await generatePerceptualHash(processed);
+    const modeField = formData.get("mode");
+    const processingMode: ProcessingMode =
+      typeof modeField === "string" && modeField.toLowerCase() === "direct"
+        ? "direct"
+        : "enhanced";
+
+    let processedBuffer: Buffer;
+    let originalBuffer: Buffer;
+    let metadata: BasicImageMetadata;
+
+    if (processingMode === "enhanced") {
+      const preprocessed = await preprocessReceiptImage(buffer);
+      processedBuffer = preprocessed.processed;
+      originalBuffer = preprocessed.original;
+      metadata = preprocessed.metadata;
+    } else {
+      const normalized = await rotateAndDescribeOriginal(buffer, file.type ?? null);
+      processedBuffer = normalized.normalized;
+      originalBuffer = normalized.normalized;
+      metadata = normalized.metadata;
+    }
+
+    const perceptualHash = await generatePerceptualHash(processedBuffer);
 
     await assertNotDuplicate(user.id, perceptualHash);
 
@@ -370,7 +391,7 @@ export async function POST(request: NextRequest) {
       progress_stage: "uploading",
       progress_value: resolvedProgressValue("uploading"),
       progress_message: PROGRESS_DESCRIPTORS.uploading.description,
-      progress_detail: null,
+      progress_detail: { pipeline: processingMode } as Json,
     });
 
     receiptJobId = receiptJob.id;
@@ -379,13 +400,17 @@ export async function POST(request: NextRequest) {
 
     try {
       await updateProgress("enhancing", resolvedProgressValue("enhancing"), {
-        message: PROGRESS_DESCRIPTORS.enhancing.description,
+        message:
+          processingMode === "enhanced"
+            ? PROGRESS_DESCRIPTORS.enhancing.description
+            : "Menggunakan gambar asli tanpa preprocessing tambahan.",
+        detail: { pipeline: processingMode } as Json,
       });
 
       const extension = detectExtension(file.type ?? null, file.name);
       const upload = await storeReceiptImage({
         userId: user.id,
-        buffer: original,
+        buffer: originalBuffer,
         contentType: file.type || "image/jpeg",
         extension,
       });
@@ -394,48 +419,61 @@ export async function POST(request: NextRequest) {
       await updateReceiptJob(receiptJob.id, { storage_path: storagePath });
 
       currentStage = "ocr";
-      await updateProgress("ocr", resolvedProgressValue("ocr", 0), {
-        message: PROGRESS_DESCRIPTORS.ocr.description,
-        detail: { ocr: { status: "starting", progress: 0 } },
-      });
+      let ocrText: string | null = null;
+      let ocrConfidence = 0;
 
-      let lastOcrUpdate = 0;
-      const pendingOcrUpdates: Array<Promise<void>> = [];
+      if (processingMode === "enhanced") {
+        await updateProgress("ocr", resolvedProgressValue("ocr", 0), {
+          message: PROGRESS_DESCRIPTORS.ocr.description,
+          detail: { pipeline: processingMode, ocr: { status: "starting", progress: 0 } } as Json,
+        });
 
-      const ocr = await performReceiptOcr(processed, {
-        onProgress: ({ status, progress }) => {
-          if (!receiptJobId) {
-            return;
-          }
-          const now = Date.now();
-          if (now - lastOcrUpdate < 350) {
-            return;
-          }
-          lastOcrUpdate = now;
-          const safeProgress = Math.max(0, Math.min(1, progress));
-          const message = formatOcrMessage(status, safeProgress);
-          const percent = resolvedProgressValue("ocr", safeProgress);
-          pendingOcrUpdates.push(
-            updateReceiptJob(receiptJobId, {
-              progress_stage: "ocr",
-              progress_value: percent,
-              progress_message: message,
-              progress_detail: { ocr: { status, progress: safeProgress } },
-            })
-              .then(() => undefined)
-              .catch(() => undefined),
-          );
-        },
-      });
+        let lastOcrUpdate = 0;
+        const pendingOcrUpdates: Array<Promise<void>> = [];
 
-      if (pendingOcrUpdates.length > 0) {
-        await Promise.all(pendingOcrUpdates);
+        const ocrResult = await performReceiptOcr(processedBuffer, {
+          onProgress: ({ status, progress }) => {
+            if (!receiptJobId) {
+              return;
+            }
+            const now = Date.now();
+            if (now - lastOcrUpdate < 350) {
+              return;
+            }
+            lastOcrUpdate = now;
+            const safeProgress = Math.max(0, Math.min(1, progress));
+            const message = formatOcrMessage(status, safeProgress);
+            const percent = resolvedProgressValue("ocr", safeProgress);
+            pendingOcrUpdates.push(
+              updateReceiptJob(receiptJobId, {
+                progress_stage: "ocr",
+                progress_value: percent,
+                progress_message: message,
+                progress_detail: { pipeline: processingMode, ocr: { status, progress: safeProgress } },
+              })
+                .then(() => undefined)
+                .catch(() => undefined),
+            );
+          },
+        });
+
+        if (pendingOcrUpdates.length > 0) {
+          await Promise.all(pendingOcrUpdates);
+        }
+
+        ocrText = ocrResult.text;
+        ocrConfidence = ocrResult.confidence ?? 0;
+
+        await updateProgress("ocr", resolvedProgressValue("ocr", 1), {
+          message: "Pembacaan teks selesai",
+          detail: { pipeline: processingMode, ocr: { status: "done", progress: 1, confidence: ocrConfidence } } as Json,
+        });
+      } else {
+        await updateProgress("ocr", resolvedProgressValue("ocr", 1), {
+          message: "Lewati OCR, mengirim langsung ke LLM",
+          detail: { pipeline: processingMode, ocr: { status: "skipped", progress: 1 } } as Json,
+        });
       }
-
-      await updateProgress("ocr", resolvedProgressValue("ocr", 1), {
-        message: "Pembacaan teks selesai",
-        detail: { ocr: { status: "done", progress: 1, confidence: ocr.confidence } },
-      });
 
       currentStage = "interpreting";
       await updateProgress("interpreting", resolvedProgressValue("interpreting"), {
@@ -444,10 +482,10 @@ export async function POST(request: NextRequest) {
 
       const parsed = await requestReceiptParsing({
         image: {
-          base64: original.toString("base64"),
+          base64: originalBuffer.toString("base64"),
           mimeType: file.type || "image/jpeg",
         },
-        ocrText: ocr.text,
+        ocrText,
         currencyHint: currencyOverride,
         totalsHint: null,
         localeHint: localeOverride,
@@ -500,7 +538,7 @@ export async function POST(request: NextRequest) {
             normalizedReceipt.notes
             ?? (normalizedReceipt.warnings.length > 0 ? normalizedReceipt.warnings.join(" | ") : null),
           model_response: normalizedReceipt.model,
-          ocr_text: ocr.text,
+          ocr_text: ocrText,
           confidence: normalizedReceipt.confidence.toFixed(3),
         })
         .select("id")
@@ -613,7 +651,7 @@ export async function POST(request: NextRequest) {
           jobId: receiptJob.id,
           receiptId: insertedReceipt.id,
           warnings: normalizedReceipt.warnings,
-          metadata,
+          metadata: { ...metadata, processingMode },
         },
         { status: 201 },
       );
