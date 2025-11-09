@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchBudgetsWithSummary } from "@/lib/supabase/queries/budgets";
 import {
@@ -19,7 +21,7 @@ export type OverviewSnapshot = {
   recentTransactions: number;
 };
 
-export async function fetchOverviewSnapshot(periodOverride?: string): Promise<OverviewSnapshot> {
+export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
   const defaultPeriod = getCurrentPeriodKey();
   let effectivePeriod = periodOverride ?? defaultPeriod;
 
@@ -33,16 +35,21 @@ export async function fetchOverviewSnapshot(periodOverride?: string): Promise<Ov
     throw new Error("Unable to compute period range for overview snapshot");
   }
 
-  const { periodStart, periodEnd } = periodRange;
+    const { periodStart, periodEnd } = periodRange;
 
-  const [accountsResult, budgets, transactionSummary] = await Promise.all([
-    fetchAccounts(),
-    fetchBudgetsWithSummary(effectivePeriod),
-    fetchTransactionSummary({
-      startDate: periodStart.toISOString(),
-      endDate: periodEnd.toISOString(),
-    }),
-  ]);
+    const [accountsResult, budgets, transactionSummary, recentTransactionList] = await Promise.all([
+      fetchAccounts(),
+      fetchBudgetsWithSummary(effectivePeriod),
+      fetchTransactionSummary({
+        startDate: periodStart.toISOString(),
+        endDate: periodEnd.toISOString(),
+      }),
+      fetchRecentTransactions({
+        limit: 10,
+        startDate: periodStart.toISOString(),
+        endDate: periodEnd.toISOString(),
+      }),
+    ]);
 
   const activeAccounts = accountsResult.accounts.filter(
     (account) => !account.archived_at,
@@ -63,24 +70,18 @@ export async function fetchOverviewSnapshot(periodOverride?: string): Promise<Ov
   const averageExpensePerDayMinor =
     daysElapsed > 0 ? Math.round(totalExpenseMinor / daysElapsed) : 0;
 
-  const recentTransactions = (
-    await fetchRecentTransactions({
-      limit: 10,
-      startDate: periodStart.toISOString(),
-      endDate: periodEnd.toISOString(),
-    })
-  ).length;
+  const recentTransactions = recentTransactionList.length;
 
-  return {
-    period: effectivePeriod,
-    totalIncomeMinor,
-    totalExpenseMinor,
-    netCashflowMinor,
-    totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
-    averageExpensePerDayMinor,
-    activeAccounts: activeAccounts.length,
-    activeBudgets: budgets.length,
-    nearingLimitBudgets,
-    recentTransactions,
-  } satisfies OverviewSnapshot;
-}
+    return {
+      period: effectivePeriod,
+      totalIncomeMinor,
+      totalExpenseMinor,
+      netCashflowMinor,
+      totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
+      averageExpensePerDayMinor,
+      activeAccounts: activeAccounts.length,
+      activeBudgets: budgets.length,
+      nearingLimitBudgets,
+      recentTransactions,
+    } satisfies OverviewSnapshot;
+  });
