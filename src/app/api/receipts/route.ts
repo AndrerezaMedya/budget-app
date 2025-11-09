@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
+import sharp from "sharp";
 
 import { DEFAULT_CURRENCY, getCurrencyDecimals } from "@/config/currencies";
 import { resolvePredefinedCategoryId } from "@/lib/categories/predefined";
@@ -28,44 +29,53 @@ type ProgressStage =
   | "done"
   | "failed";
 
+type ProcessingMode = "enhanced" | "direct";
+
+type BasicImageMetadata = {
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  size: number;
+};
+
 const PROGRESS_DESCRIPTORS: Record<Exclude<ProgressStage, "failed">, {
   label: string;
   description: string;
   range: [number, number];
 }> = {
   uploading: {
-    label: "Mengunggah struk - 0-10%",
-    description: "Mengunggah struk...",
+    label: "Mengunggah struk",
+    description: "Mengunggah struk ke server dengan koneksi aman.",
     range: [0, 10],
   },
   enhancing: {
-    label: "Menjernihkan gambar - 10-25%",
-    description: "Menjernihkan gambar untuk dibaca...",
+    label: "Menjernihkan gambar",
+    description: "Membersihkan citra agar teks lebih mudah dibaca.",
     range: [10, 25],
   },
   ocr: {
-    label: "Membaca teks (OCR) - 25-55%",
-    description: "Membaca teks pada struk...",
+    label: "Membaca teks (OCR)",
+    description: "Menjalankan mesin OCR untuk mengambil detail struk.",
     range: [25, 55],
   },
   interpreting: {
-    label: "Menafsirkan & mengekstrak - 55-75%",
-    description: "Menata item dan total belanja...",
+    label: "Menganalisis isi struk",
+    description: "Menafsirkan item, harga, dan total belanja.",
     range: [55, 75],
   },
   validating: {
-    label: "Memeriksa & melengkapi - 75-85%",
-    description: "Memeriksa konsistensi data...",
+    label: "Memeriksa hasil",
+    description: "Memastikan angka dan format transaksi konsisten.",
     range: [75, 85],
   },
   persisting: {
-    label: "Menyimpan ke akun - 85-95%",
-    description: "Menyimpan ke akun kamu...",
+    label: "Menyimpan ke akun",
+    description: "Menyimpan struk dan transaksi ke akun kamu.",
     range: [85, 95],
   },
   done: {
-    label: "Selesai - 95-100%",
-    description: "Berhasil! Struk tersimpan.",
+    label: "Berhasil disimpan",
+    description: "Struk selesai diproses dan siap ditinjau.",
     range: [95, 100],
   },
 };
@@ -79,6 +89,35 @@ const ERROR_COPY_BY_STAGE: Record<Exclude<ProgressStage, "done">, string> = {
   persisting: "Tidak bisa menyimpan ke akun. Coba lagi sebentar.",
   failed: "Terjadi kesalahan saat memproses struk.",
 };
+
+async function rotateAndDescribeOriginal(buffer: Buffer, mimeType: string | null): Promise<{
+  normalized: Buffer;
+  metadata: BasicImageMetadata;
+}> {
+  try {
+    const rotated = await sharp(buffer, { failOn: "none" }).rotate().toBuffer();
+    const info = await sharp(rotated, { failOn: "none" }).metadata();
+    return {
+      normalized: rotated,
+      metadata: {
+        width: info.width ?? null,
+        height: info.height ?? null,
+        format: info.format ?? (mimeType ? mimeType.split("/")[1] ?? null : null),
+        size: rotated.byteLength,
+      },
+    };
+  } catch {
+    return {
+      normalized: buffer,
+      metadata: {
+        width: null,
+        height: null,
+        format: mimeType ? mimeType.split("/")[1] ?? null : null,
+        size: buffer.byteLength,
+      },
+    };
+  }
+}
 
 function clampProgress(value: number): number {
   if (Number.isNaN(value)) {
