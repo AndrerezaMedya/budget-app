@@ -27,11 +27,12 @@ function getParamValue(params: SearchParams | undefined, key: string): string | 
 export default async function ReportsPage({
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { t, locale } = await getTranslator();
   const defaultPeriodKey = getCurrentPeriodKey();
-  const requestedPeriod = getParamValue(searchParams, "period") ?? defaultPeriodKey;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const requestedPeriod = getParamValue(resolvedSearchParams, "period") ?? defaultPeriodKey;
   let effectivePeriod = requestedPeriod;
 
   if (!getPeriodRange(effectivePeriod)) {

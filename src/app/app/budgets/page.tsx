@@ -56,11 +56,12 @@ function deriveProgressPercentage(plannedMinor: number, spentMinor: number) {
 export default async function BudgetsPage({
   searchParams,
 }: {
-  searchParams?: SearchParams;
+  searchParams?: Promise<SearchParams>;
 }) {
   const { t, locale } = await getTranslator();
   const defaultPeriodKey = getCurrentPeriodKey();
-  const requestedPeriod = getParamValue(searchParams, "period") ?? defaultPeriodKey;
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const requestedPeriod = getParamValue(resolvedSearchParams, "period") ?? defaultPeriodKey;
   let effectivePeriod = requestedPeriod;
   if (!getPeriodRange(effectivePeriod)) {
     effectivePeriod = defaultPeriodKey;
@@ -99,7 +100,7 @@ export default async function BudgetsPage({
             </Badge>
           </div>
         </div>
-  <CreateBudgetForm defaultPeriod={effectivePeriod} />
+        <CreateBudgetForm defaultPeriod={effectivePeriod} />
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
