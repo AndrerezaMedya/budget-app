@@ -1,11 +1,21 @@
 import Link from "next/link";
+import { cookies, headers } from "next/headers";
 import { ArrowUpRight, PieChart, Wallet2 } from "lucide-react";
 
 import { formatCurrency } from "@/lib/format";
 import { getTranslator, type Translator } from "@/lib/i18n";
-import { fetchOverviewSnapshot } from "@/lib/supabase/queries/overview";
+import {
+  fetchOverviewSnapshot,
+  fetchOverviewCharts as fetchOverviewChartsFallback,
+  type OverviewCharts,
+} from "@/lib/supabase/queries/overview";
 import { formatPeriodLabel } from "@/lib/period";
-import { MetricCard, type MetricTrend } from "@/components/dashboard";
+import {
+  CategorySpendDonut,
+  MetricCard,
+  SpendingTrendChart,
+  type MetricTrend,
+} from "@/components/dashboard";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,6 +53,50 @@ function formatDailySpend(amountMinor: number, translate: Translator) {
   });
 }
 
+
+async function loadOverviewChartsFromApi(period?: string): Promise<OverviewCharts | null> {
+  const headerStore = await headers();
+  const cookieStore = await cookies();
+
+  const host =
+    headerStore.get("x-forwarded-host") ??
+    headerStore.get("host") ??
+    process.env.VERCEL_URL ??
+    process.env.NEXT_PUBLIC_APP_URL ??
+    null;
+
+  if (!host) {
+    return null;
+  }
+
+  const protocolHeader = headerStore.get("x-forwarded-proto");
+  const protocol = protocolHeader ?? (host.includes("localhost") ? "http" : "https");
+  const query = period ? `?period=${encodeURIComponent(period)}` : "";
+  const cookieHeader = cookieStore
+    .getAll()
+    .map(({ name, value }) => `${name}=${value}`)
+    .join("; ");
+
+  const requestHeaders: HeadersInit = cookieHeader ? { cookie: cookieHeader } : {};
+
+  try {
+    const response = await fetch(`${protocol}://${host}/api/overview/charts${query}`, {
+      headers: requestHeaders,
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const payload = (await response.json()) as { data?: OverviewCharts } | null;
+    return payload?.data ?? null;
+  } catch (error) {
+    console.error("Failed to load overview charts via API", error);
+    return null;
+  }
+}
+
 function resolveTrendLabel(trend: MetricTrend, translate: Translator) {
   return translate(`overview.metrics.trend.${trend}`);
 }
@@ -50,7 +104,11 @@ function resolveTrendLabel(trend: MetricTrend, translate: Translator) {
 export default async function OverviewPage({ searchParams }: OverviewPageProps) {
   const { locale, t } = await getTranslator();
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+
   const snapshot = await fetchOverviewSnapshot(resolvedSearchParams?.period);
+  const charts =
+    (await loadOverviewChartsFromApi(resolvedSearchParams?.period)) ??
+    (await fetchOverviewChartsFallback(resolvedSearchParams?.period));
 
   const periodLabel = formatPeriodLabel(snapshot.period, locale);
   const netCashflowTrend: MetricTrend =
@@ -128,6 +186,43 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     },
   ];
 
+  const cashflowHasData = charts.cashflow.some(
+    (point) => point.incomeMinor !== 0 || point.expenseMinor !== 0,
+  );
+
+  const expenseSummaries = charts.categorySummaries.filter(
+    (summary) => summary.expenseMinor > 0,
+  );
+
+  const totalExpenseMinor = expenseSummaries.reduce(
+    (accumulator, summary) => accumulator + summary.expenseMinor,
+    0,
+  );
+
+  const topCategories = expenseSummaries.slice(0, 5);
+  const topCategoriesTotal = topCategories.reduce(
+    (accumulator, summary) => accumulator + summary.expenseMinor,
+    0,
+  );
+
+  const categoryChartData = topCategories.map((summary) => ({
+    name: summary.categoryName,
+    amountMinor: summary.expenseMinor,
+  }));
+
+  const remainder = totalExpenseMinor - topCategoriesTotal;
+  if (remainder > 0) {
+    categoryChartData.push({
+      name: t("overview.charts.categoryShare.legend.other"),
+      amountMinor: remainder,
+    });
+  }
+
+  const categoryChartHasData = categoryChartData.length > 0;
+  const categoryChartTotalLabel = t("overview.charts.categoryShare.total", {
+    amount: formatCurrency(totalExpenseMinor),
+  });
+
   return (
     <div className="space-y-8">
       <header className="space-y-2">
@@ -171,53 +266,75 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         <Card className="lg:col-span-3 border border-border bg-surface shadow-elevation">
           <CardHeader className="gap-2 border-b border-border/60 pb-4">
             <CardTitle className="text-base font-semibold tracking-tight">
-              {t("overview.accounts.title")}
+              {t("overview.charts.cashflow.title")}
             </CardTitle>
             <CardDescription>
-              {t("overview.accounts.description", {
-                count: snapshot.activeAccounts,
+              {t("overview.charts.cashflow.description", {
+                period: periodLabel,
               })}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6">
-            <EmptyState
-              icon={<Wallet2 className="size-10" />}
-              description={t("overview.accounts.placeholder")}
-              action={
-                <Button variant="secondary" size="sm" asChild>
-                  <Link href="/app/accounts" className="flex items-center gap-1">
-                    {t("nav.accounts.label")}
-                    <ArrowUpRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-              }
-            />
+            {cashflowHasData ? (
+              <div className="h-[280px]">
+                <SpendingTrendChart
+                  data={charts.cashflow}
+                  locale={locale}
+                  labels={{
+                    income: t("overview.charts.cashflow.legend.income"),
+                    expense: t("overview.charts.cashflow.legend.expense"),
+                    net: t("overview.charts.cashflow.legend.net"),
+                  }}
+                />
+              </div>
+            ) : (
+              <EmptyState
+                icon={<Wallet2 className="size-10" />}
+                description={t("overview.charts.cashflow.empty")}
+                action={
+                  <Button variant="secondary" size="sm" asChild>
+                    <Link href="/app/transactions" className="flex items-center gap-1">
+                      {t("nav.transactions.label")}
+                      <ArrowUpRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                }
+              />
+            )}
           </CardContent>
         </Card>
         <Card className="lg:col-span-2 border border-border bg-surface shadow-elevation">
           <CardHeader className="gap-2 border-b border-border/60 pb-4">
             <CardTitle className="text-base font-semibold tracking-tight">
-              {t("overview.budgets.title")}
+              {t("overview.charts.categoryShare.title")}
             </CardTitle>
             <CardDescription>
-              {t("overview.budgets.description", {
-                count: snapshot.activeBudgets,
-              })}
+              {t("overview.charts.categoryShare.description")}
             </CardDescription>
           </CardHeader>
           <CardContent className="p-6">
-            <EmptyState
-              icon={<PieChart className="size-10" />}
-              description={t("overview.budgets.placeholder")}
-              action={
-                <Button variant="secondary" size="sm" asChild>
-                  <Link href="/app/budgets" className="flex items-center gap-1">
-                    {t("nav.budgets.label")}
-                    <ArrowUpRight className="size-4" aria-hidden="true" />
-                  </Link>
-                </Button>
-              }
-            />
+            {categoryChartHasData ? (
+              <div className="h-[280px]">
+                <CategorySpendDonut
+                  data={categoryChartData}
+                  locale={locale}
+                  totalLabel={categoryChartTotalLabel}
+                />
+              </div>
+            ) : (
+              <EmptyState
+                icon={<PieChart className="size-10" />}
+                description={t("overview.charts.categoryShare.empty")}
+                action={
+                  <Button variant="secondary" size="sm" asChild>
+                    <Link href="/app/budgets" className="flex items-center gap-1">
+                      {t("nav.budgets.label")}
+                      <ArrowUpRight className="size-4" aria-hidden="true" />
+                    </Link>
+                  </Button>
+                }
+              />
+            )}
           </CardContent>
         </Card>
       </section>
