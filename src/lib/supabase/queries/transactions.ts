@@ -70,11 +70,16 @@ type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerComponentCli
 export async function fetchTransactionSummary(
   options: SummaryOptions = {},
   client?: SupabaseClient,
+  userId?: string,
 ): Promise<TransactionSummary> {
   const supabase = client ?? (await createSupabaseServerComponentClient());
   let query = supabase
     .from("transactions")
     .select("account_id, type, transfer_direction, amount_minor, occurred_at, currency");
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
 
   if (options.startDate) {
     query = query.gte("occurred_at", options.startDate);
@@ -142,6 +147,7 @@ type RecentTransactionOptions = {
 
 export async function fetchRecentTransactions(
   options: RecentTransactionOptions = {},
+  userId?: string,
 ): Promise<HydratedTransaction[]> {
   const supabase = await createSupabaseServerComponentClient();
   const limit = options.limit ?? 20;
@@ -155,6 +161,10 @@ export async function fetchRecentTransactions(
     )
     .order("occurred_at", { ascending: false })
     .limit(limit);
+
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
 
   if (options.startDate) {
     query = query.gte("occurred_at", options.startDate);
