@@ -79,11 +79,18 @@ function resolveTesseractAssets(): ResolvedTesseractAssets {
     return cachedAssets;
   }
 
+  const tesseractRoot = path.dirname(
+    nodeRequire.resolve("tesseract.js/package.json"),
+  );
+  const tesseractCoreRoot = path.dirname(
+    nodeRequire.resolve("tesseract.js-core/package.json"),
+  );
+
   const workerPath = normalizeResolvedPath(
-    nodeRequire.resolve("tesseract.js/src/worker-script/node/index.js"),
+    path.join(tesseractRoot, "src/worker-script/node/index.js"),
   );
   const corePath = normalizeResolvedPath(
-    nodeRequire.resolve("tesseract.js-core/tesseract-core.wasm.js"),
+    path.join(tesseractCoreRoot, "tesseract-core.wasm.js"),
   );
   const cachePath = path.join(os.tmpdir(), "tesseract-cache");
 
@@ -97,7 +104,7 @@ export async function performReceiptOcr(imageBuffer: Buffer, options: PerformRec
   const { data } = await Tesseract.recognize(imageBuffer, "eng+ind", {
     tessjs_create_hocr: "1",
     workerPath: assets.workerPath,
-  corePath: assets.corePath,
+    corePath: assets.corePath,
     cachePath: assets.cachePath,
     logger: onProgress
       ? (message: TesseractLoggerEvent) => {
