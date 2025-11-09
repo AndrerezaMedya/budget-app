@@ -1,6 +1,7 @@
 import { getCategoryByName, getSubcategoryByName } from "@/config/category-definitions";
 import { DEFAULT_CURRENCY } from "@/config/currencies";
 import { convertMinorToIdr, fetchRatesToIdr } from "@/lib/currency";
+import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
 import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 
@@ -18,6 +19,11 @@ type TransactionQueryRow = TransactionRow & {
   account: AccountRow | null;
   category: CategoryRow | null;
 };
+
+type CashflowQueryRow = Pick<
+  TransactionRow,
+  "occurred_at" | "type" | "transfer_direction" | "amount_minor" | "currency"
+>;
 
 export type HydratedTransaction = {
   id: string;
@@ -40,6 +46,13 @@ export type TransactionSummary = {
   totalIncomeMinor: number;
   totalExpenseMinor: number;
   transactionCount: number;
+};
+
+export type DailyCashflowPoint = {
+  date: string;
+  incomeMinor: number;
+  expenseMinor: number;
+  netMinor: number;
 };
 
 type SummaryOptions = {
@@ -217,4 +230,98 @@ export async function fetchRecentTransactions(
       createdAt: row.created_at,
     } satisfies HydratedTransaction;
   });
+}
+
+export async function fetchDailyCashflow(periodKey?: string): Promise<DailyCashflowPoint[]> {
+  const effectivePeriod = periodKey ?? getCurrentPeriodKey();
+  const periodRange = getPeriodRange(effectivePeriod);
+
+  if (!periodRange) {
+    return [];
+  }
+
+  const { periodStart, periodEnd } = periodRange;
+  const supabase = await createSupabaseServerComponentClient();
+
+  const { data, error } = await supabase
+    .from("transactions")
+    .select("occurred_at, type, transfer_direction, amount_minor, currency")
+    .gte("occurred_at", periodStart.toISOString())
+    .lt("occurred_at", periodEnd.toISOString())
+    .order("occurred_at", { ascending: true });
+
+  if (error) {
+    throw new Error(`Failed to build daily cashflow: ${error.message}`);
+  }
+
+  const rows = (data ?? []) as CashflowQueryRow[];
+  const currencies = new Set<string>();
+
+  rows.forEach((row) => {
+    if (row.currency) {
+      currencies.add(row.currency);
+    }
+  });
+
+  const rates = await fetchRatesToIdr(Array.from(currencies));
+  const daily = new Map<string, { incomeMinor: number; expenseMinor: number }>();
+
+  rows.forEach((row) => {
+    if (!row.occurred_at) {
+      return;
+    }
+
+    if (row.type !== "income" && row.type !== "expense") {
+      return;
+    }
+
+    const key = row.occurred_at.slice(0, 10);
+    const entry = daily.get(key) ?? { incomeMinor: 0, expenseMinor: 0 };
+    const converted = convertMinorToIdr(row.amount_minor, row.currency ?? DEFAULT_CURRENCY, rates);
+
+    if (row.type === "income") {
+      entry.incomeMinor += converted;
+    }
+
+    if (row.type === "expense") {
+      entry.expenseMinor += converted;
+    }
+
+    daily.set(key, entry);
+  });
+
+  const inclusiveEnd = new Date(periodEnd);
+  inclusiveEnd.setUTCHours(0, 0, 0, 0);
+  inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1);
+
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+  let lastDay = new Date(inclusiveEnd);
+  if (todayUtc.getTime() < lastDay.getTime()) {
+    lastDay = todayUtc;
+  }
+
+  const results: DailyCashflowPoint[] = [];
+  const loopEnd = lastDay.getTime();
+
+  for (
+    let cursor = new Date(periodStart);
+    cursor.getTime() <= loopEnd;
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  ) {
+    const key = cursor.toISOString().slice(0, 10);
+    const entry = daily.get(key);
+    const incomeMinor = entry?.incomeMinor ?? 0;
+    const expenseMinor = entry?.expenseMinor ?? 0;
+
+    results.push({
+      date: key,
+      incomeMinor,
+      expenseMinor,
+      netMinor: incomeMinor - expenseMinor,
+    });
+  }
+
+  return results;
 }

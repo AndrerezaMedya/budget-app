@@ -3,9 +3,12 @@ import { cache } from "react";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchBudgetsWithSummary } from "@/lib/supabase/queries/budgets";
 import {
+  fetchDailyCashflow,
   fetchRecentTransactions,
   fetchTransactionSummary,
+  type DailyCashflowPoint,
 } from "@/lib/supabase/queries/transactions";
+import { fetchCategorySummaries, type CategorySummary } from "@/lib/supabase/queries/summaries";
 import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
 
 export type OverviewSnapshot = {
@@ -21,7 +24,13 @@ export type OverviewSnapshot = {
   recentTransactions: number;
 };
 
-export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
+type ResolvedPeriod = {
+  period: string;
+  periodStart: Date;
+  periodEnd: Date;
+};
+
+function resolvePeriod(periodOverride?: string): ResolvedPeriod {
   const defaultPeriod = getCurrentPeriodKey();
   let effectivePeriod = periodOverride ?? defaultPeriod;
 
@@ -35,21 +44,29 @@ export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
     throw new Error("Unable to compute period range for overview snapshot");
   }
 
-    const { periodStart, periodEnd } = periodRange;
+  return {
+    period: effectivePeriod,
+    periodStart: periodRange.periodStart,
+    periodEnd: periodRange.periodEnd,
+  } satisfies ResolvedPeriod;
+}
 
-    const [accountsResult, budgets, transactionSummary, recentTransactionList] = await Promise.all([
-      fetchAccounts(),
-      fetchBudgetsWithSummary(effectivePeriod),
-      fetchTransactionSummary({
-        startDate: periodStart.toISOString(),
-        endDate: periodEnd.toISOString(),
-      }),
-      fetchRecentTransactions({
-        limit: 10,
-        startDate: periodStart.toISOString(),
-        endDate: periodEnd.toISOString(),
-      }),
-    ]);
+export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
+  const { period, periodStart, periodEnd } = resolvePeriod(periodOverride);
+
+  const [accountsResult, budgets, transactionSummary, recentTransactionList] = await Promise.all([
+    fetchAccounts(),
+    fetchBudgetsWithSummary(period),
+    fetchTransactionSummary({
+      startDate: periodStart.toISOString(),
+      endDate: periodEnd.toISOString(),
+    }),
+    fetchRecentTransactions({
+      limit: 10,
+      startDate: periodStart.toISOString(),
+      endDate: periodEnd.toISOString(),
+    }),
+  ]);
 
   const activeAccounts = accountsResult.accounts.filter(
     (account) => !account.archived_at,
@@ -72,16 +89,36 @@ export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
 
   const recentTransactions = recentTransactionList.length;
 
-    return {
-      period: effectivePeriod,
-      totalIncomeMinor,
-      totalExpenseMinor,
-      netCashflowMinor,
-      totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
-      averageExpensePerDayMinor,
-      activeAccounts: activeAccounts.length,
-      activeBudgets: budgets.length,
-      nearingLimitBudgets,
-      recentTransactions,
-    } satisfies OverviewSnapshot;
-  });
+  return {
+    period,
+    totalIncomeMinor,
+    totalExpenseMinor,
+    netCashflowMinor,
+    totalAccountBalanceMinorIdr: accountsResult.totalBalanceMinorIdr,
+    averageExpensePerDayMinor,
+    activeAccounts: activeAccounts.length,
+    activeBudgets: budgets.length,
+    nearingLimitBudgets,
+    recentTransactions,
+  } satisfies OverviewSnapshot;
+});
+
+export type OverviewCharts = {
+  period: string;
+  cashflow: DailyCashflowPoint[];
+  categorySummaries: CategorySummary[];
+};
+
+export const fetchOverviewCharts = cache(async (periodOverride?: string) => {
+  const { period } = resolvePeriod(periodOverride);
+  const [cashflow, categorySummaries] = await Promise.all([
+    fetchDailyCashflow(period),
+    fetchCategorySummaries(period),
+  ]);
+
+  return {
+    period,
+    cashflow,
+    categorySummaries,
+  } satisfies OverviewCharts;
+});
