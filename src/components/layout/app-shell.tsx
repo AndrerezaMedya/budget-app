@@ -37,28 +37,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     () =>
       user
         ? [
-            {
-              id: "add-transaction",
-              href: "/app/transactions",
-              label: t("shell.quickActions.addTransaction"),
-              icon: Plus,
-              variant: "default" as const,
-            },
-            {
-              id: "upload-receipt",
-              href: "/app/receipts",
-              label: t("shell.quickActions.uploadReceipt"),
-              icon: Scan,
-              variant: "secondary" as const,
-            },
-            {
-              id: "transfer",
-              href: "/app/transactions?type=transfer",
-              label: t("shell.quickActions.transfer"),
-              icon: ArrowLeftRight,
-              variant: "ghost" as const,
-            },
-          ]
+          {
+            id: "add-transaction",
+            href: "/app/transactions",
+            label: t("shell.quickActions.addTransaction"),
+            icon: Plus,
+            variant: "default" as const,
+          },
+          {
+            id: "upload-receipt",
+            href: "/app/receipts",
+            label: t("shell.quickActions.uploadReceipt"),
+            icon: Scan,
+            variant: "secondary" as const,
+          },
+          {
+            id: "transfer",
+            href: "/app/transactions?type=transfer",
+            label: t("shell.quickActions.transfer"),
+            icon: ArrowLeftRight,
+            variant: "ghost" as const,
+          },
+        ]
         : [],
     [t, user],
   );
@@ -88,6 +88,35 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       label: t("transactions.toggle.open"),
     };
   }, [pathname, t, user]);
+
+  const prefetchRoute = React.useCallback(
+    (href: string) => {
+      if (!href) return;
+      try {
+        router.prefetch(href);
+      } catch {
+        // ignore prefetch errors (e.g. dev mode or duplicate calls)
+      }
+    },
+    [router],
+  );
+
+  const navigationTargets = React.useMemo(() => {
+    const targets = new Set<string>();
+    APP_ROUTES.forEach((route) => targets.add(route.href));
+    quickActions.forEach((action) => targets.add(action.href));
+    if (fabAction?.href) {
+      targets.add(fabAction.href);
+    }
+    return Array.from(targets);
+  }, [fabAction, quickActions]);
+
+  React.useEffect(() => {
+    if (!navigationTargets.length) {
+      return;
+    }
+    navigationTargets.forEach((href) => prefetchRoute(href));
+  }, [navigationTargets, prefetchRoute]);
 
   React.useEffect(() => {
     if (!loading && !user) {
@@ -155,6 +184,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     : "hover:bg-muted hover:text-foreground",
                 )}
                 onClick={() => setSidebarOpen(false)}
+                onMouseEnter={() => prefetchRoute(route.href)}
+                onFocus={() => prefetchRoute(route.href)}
               >
                 <div className="flex items-center gap-2">
                   <route.icon className="size-4 shrink-0" aria-hidden="true" />
@@ -203,7 +234,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
       </aside>
-  <div className="flex min-h-screen flex-1 flex-col">
+      <div className="flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12">
             <div className="flex flex-wrap items-center justify-between gap-3">
@@ -224,22 +255,26 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {user && quickActions.length
                   ? quickActions.map((action) => {
-                      const Icon = action.icon;
-                      return (
-                        <Button
-                          key={action.id}
-                          variant={action.variant}
-                          size="sm"
-                          asChild
-                          className="gap-2"
+                    const Icon = action.icon;
+                    return (
+                      <Button
+                        key={action.id}
+                        variant={action.variant}
+                        size="sm"
+                        asChild
+                        className="gap-2"
+                      >
+                        <Link
+                          href={action.href}
+                          onMouseEnter={() => prefetchRoute(action.href)}
+                          onFocus={() => prefetchRoute(action.href)}
                         >
-                          <Link href={action.href}>
-                            <Icon className="size-4" aria-hidden="true" />
-                            <span>{action.label}</span>
-                          </Link>
-                        </Button>
-                      );
-                    })
+                          <Icon className="size-4" aria-hidden="true" />
+                          <span>{action.label}</span>
+                        </Link>
+                      </Button>
+                    );
+                  })
                   : null}
                 <ThemeToggle />
                 {user ? (
@@ -283,7 +318,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           size="icon"
           className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg md:hidden"
         >
-          <Link href={fabAction.href} aria-label={fabAction.label}>
+          <Link
+            href={fabAction.href}
+            aria-label={fabAction.label}
+            onMouseEnter={() => prefetchRoute(fabAction.href)}
+            onFocus={() => prefetchRoute(fabAction.href)}
+          >
             <Plus className="size-6" aria-hidden="true" />
             <span className="sr-only">{fabAction.label}</span>
           </Link>
