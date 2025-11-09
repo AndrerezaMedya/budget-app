@@ -1,5 +1,6 @@
 import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
 import { fetchTransactionSummary } from "@/lib/supabase/queries/transactions";
+import { requireUserId } from "@/lib/supabase/auth";
 import { convertMinorToIdr, fetchRatesToIdr } from "@/lib/currency";
 import { DEFAULT_CURRENCY } from "@/config/currencies";
 import type { Database } from "@/types/supabase";
@@ -16,12 +17,14 @@ type AccountsQueryResult = {
 };
 
 export async function fetchAccounts(): Promise<AccountsQueryResult> {
+  const userId = await requireUserId();
   const supabase = await createSupabaseServerComponentClient();
   const { data, error } = await supabase
     .from("accounts")
     .select(
       "id, name, type, currency, opening_balance_minor, order_index, archived_at, created_at, updated_at, user_id",
     )
+    .eq("user_id", userId)
     .order("order_index", { ascending: true })
     .order("created_at", { ascending: true });
 
