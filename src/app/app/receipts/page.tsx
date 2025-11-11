@@ -83,9 +83,11 @@ export default async function ReceiptsPage() {
           <CardTitle>{t("transactions.receipts.title")}</CardTitle>
           <CardDescription>{t("transactions.receipts.description")}</CardDescription>
         </CardHeader>
-        <CardContent className="pb-3 md:pb-6">
-          <div className="max-h-[min(68vh,34rem)] overflow-y-auto pr-1 md:max-h-none md:overflow-visible">
-            <UploadReceiptForm accounts={receiptAccountOptions} />
+        <CardContent className="pb-4 md:pb-6">
+          <div className="mx-auto w-full max-w-[24rem] md:max-w-none">
+            <div className="md:max-h-[min(68vh,34rem)] md:overflow-y-auto md:pr-1">
+              <UploadReceiptForm accounts={receiptAccountOptions} />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -103,8 +105,8 @@ export default async function ReceiptsPage() {
           ) : (
             <div className="grid gap-4">
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="max-w-full overflow-x-auto">
-                  <table className="hidden min-w-full divide-y divide-border text-sm md:table md:table-fixed">
+                <div className="hidden max-w-full overflow-x-auto md:block">
+                  <table className="min-w-full table-fixed divide-y divide-border text-sm">
                     <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-4 py-3 text-left">

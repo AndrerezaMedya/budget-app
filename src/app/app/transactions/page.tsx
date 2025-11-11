@@ -878,9 +878,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
           ) : null}
         </CardHeader>
         <CardContent>
-          <div className="overflow-hidden rounded-lg border border-border">
-            <table className="hidden min-w-full divide-y divide-border text-sm md:table">
-              <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+          <div className="mx-auto w-full max-w-[25rem] md:max-w-none">
+            <div className="overflow-hidden rounded-lg border border-border">
+              <table className="hidden min-w-full divide-y divide-border text-sm md:table">
+                <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   {TABLE_COLUMNS.map((column) => (
                     <th
@@ -1030,8 +1031,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                       </Fragment>
                     );
                   })}
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
             <div className="space-y-4 p-4 md:hidden">
               {filteredTransactions.length === 0 ? (
                 <div className="rounded-lg border border-dashed border-border/70 bg-muted/20 px-4 py-6 text-sm text-muted-foreground">
