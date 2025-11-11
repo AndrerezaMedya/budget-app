@@ -402,7 +402,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         ref={mobileNavRef}
         className="fixed inset-x-0 bottom-0 z-[70] border-t border-border bg-background/95 pb-[var(--app-mobile-nav-padding)] pt-[0.35rem] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden"
         aria-label={t("shell.nav.toggle")}
-        style={{ minHeight: "var(--app-mobile-nav-offset)" }}
+        style={{ minHeight: "var(--app-mobile-nav-height)" }}
       >
         <div
           className="mx-auto flex max-w-3xl items-center gap-1 px-3"
