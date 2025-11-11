@@ -17,6 +17,7 @@ import { ACCOUNT_CURRENCY_OPTIONS, getCurrencyDecimals } from "@/config/currenci
 import { createTransactionAction } from "@/actions/transactions";
 import { initialActionState } from "@/actions/types";
 import { useToast } from "@/components/providers/toast-provider";
+import { useI18n } from "@/components/providers/i18n-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,13 +47,6 @@ const POLL_INTERVAL_MS = 1500;
 const AUTO_STAGE_STEP_MS = 2200;
 const CATCHUP_STAGE_STEP_MS = 420;
 
-const JOB_STATUS_LABEL: Record<ReceiptJobStatus, string> = {
-  pending: "Menunggu antrian",
-  processing: "Memproses struk",
-  succeeded: "Berhasil diproses",
-  failed: "Gagal diproses",
-};
-
 const TEXTAREA_BASE_CLASSES =
   "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
@@ -68,67 +62,152 @@ const PROGRESS_STAGE_ORDER: ReceiptProgressStage[] = [
   "done",
 ];
 
-const PROGRESS_STEPS: Array<{
+type LocalizedProgressStep = {
   id: ReceiptProgressStage;
   title: string;
   description: string;
   range: [number, number];
-}> = [
+};
+
+function resolveJobStatusLabels(locale: string): Record<ReceiptJobStatus, string> {
+  if (locale.startsWith("id")) {
+    return {
+      pending: "Menunggu antrian",
+      processing: "Memproses struk",
+      succeeded: "Berhasil diproses",
+      failed: "Gagal diproses",
+    } satisfies Record<ReceiptJobStatus, string>;
+  }
+
+  return {
+    pending: "Waiting in queue",
+    processing: "Processing receipt",
+    succeeded: "Processed successfully",
+    failed: "Processing failed",
+  } satisfies Record<ReceiptJobStatus, string>;
+}
+
+function resolveProgressSteps(locale: string): LocalizedProgressStep[] {
+  if (locale.startsWith("id")) {
+    return [
+      {
+        id: "uploading",
+        title: "Mengunggah struk",
+        description: "Mengunggah struk ke server dengan koneksi aman.",
+        range: [0, 10],
+      },
+      {
+        id: "enhancing",
+        title: "Menjernihkan gambar",
+        description: "Membersihkan citra agar teks lebih mudah dibaca.",
+        range: [10, 25],
+      },
+      {
+        id: "ocr",
+        title: "Membaca teks (OCR)",
+        description: "Menjalankan mesin OCR untuk mengambil detail struk.",
+        range: [25, 55],
+      },
+      {
+        id: "interpreting",
+        title: "Menganalisis isi struk",
+        description: "Menafsirkan item, harga, dan total belanja.",
+        range: [55, 75],
+      },
+      {
+        id: "validating",
+        title: "Memeriksa hasil",
+        description: "Memastikan angka dan format transaksi konsisten.",
+        range: [75, 85],
+      },
+      {
+        id: "persisting",
+        title: "Menyimpan ke akun",
+        description: "Menyimpan struk dan transaksi ke akun kamu.",
+        range: [85, 95],
+      },
+      {
+        id: "done",
+        title: "Berhasil disimpan",
+        description: "Struk selesai diproses dan siap ditinjau.",
+        range: [95, 100],
+      },
+    ];
+  }
+
+  return [
     {
       id: "uploading",
-      title: "Mengunggah struk",
-      description: "Mengunggah struk ke server dengan koneksi aman.",
+      title: "Uploading receipt",
+      description: "Sending the receipt to the server securely.",
       range: [0, 10],
     },
     {
       id: "enhancing",
-      title: "Menjernihkan gambar",
-      description: "Membersihkan citra agar teks lebih mudah dibaca.",
+      title: "Enhancing image",
+      description: "Improving clarity so the text is readable.",
       range: [10, 25],
     },
     {
       id: "ocr",
-      title: "Membaca teks (OCR)",
-      description: "Menjalankan mesin OCR untuk mengambil detail struk.",
+      title: "Reading text (OCR)",
+      description: "Running OCR to capture receipt details.",
       range: [25, 55],
     },
     {
       id: "interpreting",
-      title: "Menganalisis isi struk",
-      description: "Menafsirkan item, harga, dan total belanja.",
+      title: "Interpreting receipt contents",
+      description: "Parsing items, prices, and totals.",
       range: [55, 75],
     },
     {
       id: "validating",
-      title: "Memeriksa hasil",
-      description: "Memastikan angka dan format transaksi konsisten.",
+      title: "Validating results",
+      description: "Ensuring amounts and formatting stay consistent.",
       range: [75, 85],
     },
     {
       id: "persisting",
-      title: "Menyimpan ke akun",
-      description: "Menyimpan struk dan transaksi ke akun kamu.",
+      title: "Saving to workspace",
+      description: "Storing the receipt and transaction in your workspace.",
       range: [85, 95],
     },
     {
       id: "done",
-      title: "Berhasil disimpan",
-      description: "Struk selesai diproses dan siap ditinjau.",
+      title: "Processing complete",
+      description: "Receipt processed and ready to review.",
       range: [95, 100],
     },
   ];
+}
 
-const ERROR_COPY_BY_STAGE: Record<ReceiptProgressStage | "unknown", string> = {
-  uploading: "Unggahan gagal. Periksa koneksi dan coba lagi.",
-  enhancing: "Gambar sulit diproses. Pastikan struk tidak buram.",
-  ocr: "Teks sulit terbaca. Coba foto lebih dekat atau rata.",
-  interpreting: "Data belanja sulit disusun. Coba unggah ulang struk.",
-  validating: "Total tidak konsisten. Periksa kembali total di struk.",
-  persisting: "Tidak bisa menyimpan ke akun. Coba lagi sebentar.",
-  done: "Berhasil! Struk tersimpan.",
-  failed: "Terjadi kesalahan saat memproses struk.",
-  unknown: "Proses struk terhenti. Coba lagi.",
-};
+function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | "unknown", string> {
+  if (locale.startsWith("id")) {
+    return {
+      uploading: "Unggahan gagal. Periksa koneksi dan coba lagi.",
+      enhancing: "Gambar sulit diproses. Pastikan struk tidak buram.",
+      ocr: "Teks sulit terbaca. Coba foto lebih dekat atau rata.",
+      interpreting: "Data belanja sulit disusun. Coba unggah ulang struk.",
+      validating: "Total tidak konsisten. Periksa kembali total di struk.",
+      persisting: "Tidak bisa menyimpan ke akun. Coba lagi sebentar.",
+      done: "Berhasil! Struk tersimpan.",
+      failed: "Terjadi kesalahan saat memproses struk.",
+      unknown: "Proses struk terhenti. Coba lagi.",
+    } satisfies Record<ReceiptProgressStage | "unknown", string>;
+  }
+
+  return {
+    uploading: "Upload failed. Check your connection and try again.",
+    enhancing: "Could not enhance the image. Make sure the receipt isn’t blurry.",
+    ocr: "Text was hard to read. Try a closer, flatter photo.",
+    interpreting: "Receipt data was hard to interpret. Please upload again.",
+    validating: "Totals looked inconsistent. Double-check the receipt.",
+    persisting: "Unable to save to your account. Try again shortly.",
+    done: "Success! Receipt stored.",
+    failed: "An error occurred while processing the receipt.",
+    unknown: "Receipt processing stopped unexpectedly. Try again.",
+  } satisfies Record<ReceiptProgressStage | "unknown", string>;
+}
 
 function normalizeProgressStage(value: unknown): ReceiptProgressStage | null {
   if (typeof value !== "string") {
@@ -315,9 +394,10 @@ type UploadReceiptFormProps = {
 export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const [file, setFile] = useState<File | null>(null);
   const firstAccount = accounts[0] ?? null;
+  const { locale: activeLocale } = useI18n();
   const [accountId, setAccountId] = useState<string>(() => firstAccount?.id ?? "");
   const [currency, setCurrency] = useState<string>(() => firstAccount?.currency ?? ACCOUNT_CURRENCY_OPTIONS[0]?.value ?? "IDR");
-  const [locale, setLocale] = useState<string>("id-ID");
+  const [ocrLocale, setOcrLocale] = useState<string>(() => (activeLocale === "id" ? "id-ID" : "en-US"));
   const [state, setState] = useState<UploadState>({ status: "idle" });
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [jobStatus, setJobStatus] = useState<JobStatusSnapshot | null>(null);
@@ -344,6 +424,14 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const stageAdvanceTimeoutRef = useRef<number | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const jobStatusLabels = useMemo(() => resolveJobStatusLabels(activeLocale), [activeLocale]);
+  const progressSteps = useMemo(() => resolveProgressSteps(activeLocale), [activeLocale]);
+  const errorCopyByStage = useMemo(() => resolveErrorCopyByStage(activeLocale), [activeLocale]);
+  const isIndonesian = useMemo(() => activeLocale.startsWith("id"), [activeLocale]);
+  const fetchingStatusLabel = useMemo(
+    () => (isIndonesian ? "Meminta status..." : "Requesting status..."),
+    [isIndonesian],
+  );
   const [createState, createTransactionFormAction] = useActionState(createTransactionAction, initialActionState);
   const accountMap = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
   const hasAccounts = accounts.length > 0;
@@ -368,8 +456,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
       if (selectedFile.size > MAX_FILE_SIZE_BYTES) {
         toast({
-          title: "File terlalu besar",
-          description: "Ukuran maksimum 10MB per struk.",
+          title: isIndonesian ? "File terlalu besar" : "File too large",
+          description: isIndonesian
+            ? "Ukuran maksimum 10MB per struk."
+            : "Maximum size is 10MB per receipt.",
           variant: "error",
         });
         return;
@@ -377,8 +467,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
       if (selectedFile.type && !ACCEPTED_MIME_TYPES.includes(selectedFile.type)) {
         toast({
-          title: "Format tidak didukung",
-          description: "Gunakan JPG, PNG, WEBP, HEIC, HEIF, atau TIFF.",
+          title: isIndonesian ? "Format tidak didukung" : "Unsupported format",
+          description: isIndonesian
+            ? "Gunakan JPG, PNG, WEBP, HEIC, HEIF, atau TIFF."
+            : "Use JPG, PNG, WEBP, HEIC, HEIF, or TIFF.",
           variant: "error",
         });
         return;
@@ -397,7 +489,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       clearStageAdvanceTimer();
       setDisplayStageIndex(0);
     },
-    [clearStageAdvanceTimer, setState, toast],
+    [clearStageAdvanceTimer, isIndonesian, setState, toast],
   );
 
   const handleDrop = useCallback(
@@ -502,9 +594,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const warnings = jobStatus?.receipt?.warnings ?? (state.status === "success" ? state.warnings : []);
   const isBusy = state.status === "uploading" || state.status === "tracking";
   const statusLabel = jobStatus
-    ? JOB_STATUS_LABEL[jobStatus.status]
+    ? jobStatusLabels[jobStatus.status]
     : state.status === "tracking"
-      ? "Meminta status..."
+      ? fetchingStatusLabel
       : null;
   const failingStage = (jobStatus?.errorCode as ReceiptProgressStage | null) ?? null;
   const activeProgressStage: ReceiptProgressStage = useMemo(() => {
@@ -623,10 +715,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
   const displayStep = useMemo(() => {
     if (activeProgressStage === "failed" && failingStage) {
-      return PROGRESS_STEPS.find((step) => step.id === failingStage) ?? PROGRESS_STEPS[0];
+      return progressSteps.find((step) => step.id === failingStage) ?? progressSteps[0];
     }
-    return PROGRESS_STEPS.find((step) => step.id === displayStageId) ?? PROGRESS_STEPS[0];
-  }, [activeProgressStage, displayStageId, failingStage]);
+    return progressSteps.find((step) => step.id === displayStageId) ?? progressSteps[0];
+  }, [activeProgressStage, displayStageId, failingStage, progressSteps]);
 
   const progressPercent = useMemo(() => {
     if (state.status === "success") {
@@ -638,25 +730,25 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     if (state.status === "error") {
       return 100;
     }
-    const step = PROGRESS_STEPS.find((candidate) => candidate.id === displayStageId);
+    const step = progressSteps.find((candidate) => candidate.id === displayStageId);
     if (step) {
       const [min, max] = step.range;
       const midpoint = min + (max - min) / 2;
       return clampPercent(Math.round(midpoint));
     }
     return 0;
-  }, [displayStageId, jobStatus?.progressValue, state.status]);
+  }, [displayStageId, jobStatus?.progressValue, progressSteps, state.status]);
 
   const stageMessage = useMemo(() => {
     if (activeProgressStage === "failed") {
       const stageKey = failingStage ?? lastProgressStageRef.current ?? "unknown";
-      return ERROR_COPY_BY_STAGE[stageKey] ?? ERROR_COPY_BY_STAGE.unknown;
+      return errorCopyByStage[stageKey] ?? errorCopyByStage.unknown;
     }
     if (transientNotice) {
       return transientNotice;
     }
     return jobStatus?.progressMessage ?? displayStep?.description ?? "";
-  }, [activeProgressStage, displayStep, failingStage, jobStatus?.progressMessage, transientNotice]);
+  }, [activeProgressStage, displayStep, errorCopyByStage, failingStage, jobStatus?.progressMessage, transientNotice]);
 
   const stageState = useCallback(
     (stageId: ReceiptProgressStage): "done" | "active" | "upcoming" | "failed" => {
@@ -792,8 +884,12 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
     if (createState.status === "success") {
       toast({
-        title: "Transaksi dibuat",
-        description: createState.message ?? "Transaksi dari struk berhasil ditambahkan.",
+        title: isIndonesian ? "Transaksi dibuat" : "Transaction created",
+        description:
+          createState.message
+          ?? (isIndonesian
+            ? "Transaksi dari struk berhasil ditambahkan."
+            : "Receipt details saved as a transaction."),
         variant: "success",
       });
       setIsCreatingTransaction(false);
@@ -805,13 +901,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
     if (createState.status === "error") {
       toast({
-        title: "Gagal membuat transaksi",
-        description: createState.message ?? "Periksa kembali data transaksi.",
+        title: isIndonesian ? "Gagal membuat transaksi" : "Unable to create transaction",
+        description:
+          createState.message
+          ?? (isIndonesian
+            ? "Periksa kembali data transaksi."
+            : "Review the transaction details and try again."),
         variant: "error",
       });
       setIsCreatingTransaction(false);
     }
-  }, [createState.message, createState.status, handleResetAfterSuccess, router, toast]);
+  }, [createState.message, createState.status, handleResetAfterSuccess, isIndonesian, router, toast]);
 
   useEffect(() => {
     if (state.status === "uploading" || state.status === "tracking") {
@@ -849,10 +949,12 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
     async function enableCamera() {
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-        const message = "Perangkat ini tidak mendukung akses kamera di browser.";
+        const message = isIndonesian
+          ? "Perangkat ini tidak mendukung akses kamera di browser."
+          : "This device does not support camera access in the browser.";
         setCameraError(message);
         toast({
-          title: "Kamera tidak tersedia",
+          title: isIndonesian ? "Kamera tidak tersedia" : "Camera unavailable",
           description: message,
           variant: "error",
         });
@@ -882,7 +984,11 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             await video.play();
             setCameraError(null);
           } catch (playError) {
-            const message = playError instanceof Error ? playError.message : "Tidak dapat memutar kamera";
+            const message = playError instanceof Error
+              ? playError.message
+              : isIndonesian
+                ? "Tidak dapat memutar kamera"
+                : "Unable to play camera feed";
             setCameraError(message);
           }
         }
@@ -890,11 +996,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         if (!active) {
           return;
         }
-        const message = error instanceof Error ? error.message : "Tidak dapat mengakses kamera";
+        const message = error instanceof Error
+          ? error.message
+          : isIndonesian
+            ? "Tidak dapat mengakses kamera"
+            : "Unable to access camera";
         setCameraError(message);
         toast({
-          title: "Tidak dapat membuka kamera",
-          description: "Pastikan izin kamera diizinkan. Safari iOS memerlukan koneksi HTTPS.",
+          title: isIndonesian ? "Tidak dapat membuka kamera" : "Camera access blocked",
+          description: isIndonesian
+            ? "Pastikan izin kamera diizinkan. Safari iOS memerlukan koneksi HTTPS."
+            : "Allow camera permissions. Safari on iOS requires an HTTPS connection.",
           variant: "error",
         });
       }
@@ -906,7 +1018,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       active = false;
       stopCamera();
     };
-  }, [isCameraOpen, stopCamera, toast]);
+  }, [isCameraOpen, isIndonesian, stopCamera, toast]);
 
   const handleCloseCamera = useCallback(() => {
     setIsCameraOpen(false);
@@ -920,7 +1032,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         if (blob) {
           resolve(blob);
         } else {
-          reject(new Error("Gagal menghasilkan gambar dari kamera"));
+          reject(new Error(isIndonesian ? "Gagal menghasilkan gambar dari kamera" : "Could not capture image from camera"));
         }
       };
 
@@ -939,22 +1051,22 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         }
         resolve(new Blob([array], { type: "image/jpeg" }));
       } catch (error) {
-        reject(error instanceof Error ? error : new Error("Gagal menyiapkan gambar"));
+        reject(error instanceof Error ? error : new Error(isIndonesian ? "Gagal menyiapkan gambar" : "Failed to prepare image"));
       }
     });
-  }, []);
+  }, [isIndonesian]);
 
   const handleCapture = useCallback(async () => {
     const video = videoRef.current;
     if (!video) {
-      setCameraError("Kamera belum siap");
+      setCameraError(isIndonesian ? "Kamera belum siap" : "Camera not ready yet");
       return;
     }
 
     const width = video.videoWidth;
     const height = video.videoHeight;
     if (!width || !height) {
-      setCameraError("Menunggu kamera siap...");
+      setCameraError(isIndonesian ? "Menunggu kamera siap..." : "Waiting for camera to start...");
       return;
     }
 
@@ -963,7 +1075,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) {
-      setCameraError("Canvas tidak tersedia");
+      setCameraError(isIndonesian ? "Canvas tidak tersedia" : "Canvas not available");
       return;
     }
 
@@ -976,29 +1088,37 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       handleFileSelection(capturedFile);
       handleCloseCamera();
       toast({
-        title: "Foto ditangkap",
-        description: "Tekan Scan struk untuk mulai memproses.",
+        title: isIndonesian ? "Foto ditangkap" : "Photo captured",
+        description: isIndonesian
+          ? "Tekan Scan struk untuk mulai memproses."
+          : "Tap Scan receipt to start processing.",
         variant: "success",
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Tidak dapat menyimpan foto";
+      const message = error instanceof Error
+        ? error.message
+        : isIndonesian
+          ? "Tidak dapat menyimpan foto"
+          : "Unable to save photo";
       setCameraError(message);
       toast({
-        title: "Kamera gagal",
+        title: isIndonesian ? "Kamera gagal" : "Camera capture failed",
         description: message,
         variant: "error",
       });
     } finally {
       setIsCapturing(false);
     }
-  }, [canvasToBlob, handleCloseCamera, handleFileSelection, toast]);
+  }, [canvasToBlob, handleCloseCamera, handleFileSelection, isIndonesian, toast]);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file) {
       toast({
-        title: "Upload gagal",
-        description: "Pilih file struk terlebih dahulu.",
+        title: isIndonesian ? "Upload gagal" : "Upload failed",
+        description: isIndonesian
+          ? "Pilih file struk terlebih dahulu."
+          : "Select a receipt file first.",
         variant: "error",
       });
       return;
@@ -1006,8 +1126,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
     if (!accountId) {
       toast({
-        title: "Upload gagal",
-        description: "Pilih akun pembayaran terlebih dahulu.",
+        title: isIndonesian ? "Upload gagal" : "Upload failed",
+        description: isIndonesian
+          ? "Pilih akun pembayaran terlebih dahulu."
+          : "Choose a destination account first.",
         variant: "error",
       });
       return;
@@ -1017,7 +1139,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     formData.append("file", file);
     formData.append("accountId", accountId);
     formData.append("currency", currency.toUpperCase());
-    formData.append("locale", locale);
+    formData.append("locale", ocrLocale);
     formData.append("mode", processingMode);
 
     setState({ status: "uploading" });
@@ -1039,26 +1161,32 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       const payload = await response.json();
 
       if (!response.ok) {
-        throw new Error(payload?.error ?? "Gagal memproses struk");
+        throw new Error(
+          typeof payload?.error === "string"
+            ? payload.error
+            : isIndonesian
+              ? "Gagal memproses struk"
+              : "Failed to process receipt",
+        );
       }
 
       const jobId = typeof payload?.jobId === "string" ? payload.jobId : null;
 
       if (!jobId) {
-        throw new Error("ID pekerjaan tidak valid");
+        throw new Error(isIndonesian ? "ID pekerjaan tidak valid" : "Invalid job identifier");
       }
 
       setState({ status: "tracking", jobId });
       setActiveJobId(jobId);
     } catch (error) {
-      const fallback = ERROR_COPY_BY_STAGE.uploading;
+      const fallback = errorCopyByStage.uploading;
       const message = error instanceof Error ? error.message : fallback;
       const displayMessage = typeof message === "string" && message.trim().length > 0 ? message : fallback;
       setState({ status: "error", message: displayMessage });
       setActiveJobId(null);
       setJobStatus(null);
       toast({
-        title: "Upload gagal",
+        title: isIndonesian ? "Upload gagal" : "Upload failed",
         description: displayMessage,
         variant: "error",
       });
@@ -1087,7 +1215,11 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
         if (!response.ok) {
           const errorPayload = raw as { error?: unknown } | null;
-          const message = typeof errorPayload?.error === "string" ? errorPayload.error : "Gagal memuat status";
+          const message = typeof errorPayload?.error === "string"
+            ? errorPayload.error
+            : isIndonesian
+              ? "Gagal memuat status"
+              : "Unable to load status";
           throw new Error(message);
         }
 
@@ -1143,17 +1275,21 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               warnings: nextStatus.receipt.warnings,
             });
             toast({
-              title: "Struk diproses",
-              description: "Hasil parsing siap ditinjau di daftar transaksi.",
+              title: isIndonesian ? "Struk diproses" : "Receipt processed",
+              description: isIndonesian
+                ? "Hasil parsing siap ditinjau di daftar transaksi."
+                : "Parsed details are ready in the transactions list.",
               variant: "success",
             });
             setFile(null);
             setTransientNotice(null);
           } else {
-            const message = "Struk selesai, tetapi data tidak ditemukan.";
+            const message = isIndonesian
+              ? "Struk selesai, tetapi data tidak ditemukan."
+              : "Processing finished but no data was returned.";
             setState({ status: "error", message });
             toast({
-              title: "Upload gagal",
+              title: isIndonesian ? "Upload gagal" : "Upload failed",
               description: message,
               variant: "error",
             });
@@ -1165,11 +1301,11 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         if (nextStatus.status === "failed") {
           const stageForError = (nextStatus.errorCode as ReceiptProgressStage | null) ?? lastProgressStageRef.current ?? "unknown";
           lastProgressStageRef.current = stageForError === "failed" ? lastProgressStageRef.current : stageForError;
-          const friendly = ERROR_COPY_BY_STAGE[stageForError] ?? ERROR_COPY_BY_STAGE.unknown;
+          const friendly = errorCopyByStage[stageForError] ?? errorCopyByStage.unknown;
           setState({ status: "error", message: friendly });
           setTransientNotice(null);
           toast({
-            title: "Upload gagal",
+            title: isIndonesian ? "Upload gagal" : "Upload failed",
             description: friendly,
             variant: "error",
           });
@@ -1185,18 +1321,22 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
         if (pollRetryRef.current < 2) {
           pollRetryRef.current += 1;
-          setTransientNotice("Koneksi lambat, mencoba lagi...");
+          setTransientNotice(isIndonesian ? "Koneksi lambat, mencoba lagi..." : "Connection is slow, retrying...");
           timeoutId = setTimeout(poll, POLL_INTERVAL_MS * 2);
           return;
         }
 
-        const message = error instanceof Error ? error.message : "Gagal memuat status";
+        const message = error instanceof Error
+          ? error.message
+          : isIndonesian
+            ? "Gagal memuat status"
+            : "Unable to load status";
         const stageForError = lastProgressStageRef.current ?? "unknown";
-        const friendly = ERROR_COPY_BY_STAGE[stageForError] ?? message;
+        const friendly = errorCopyByStage[stageForError] ?? message;
         setState({ status: "error", message: friendly });
         setTransientNotice(null);
         toast({
-          title: "Upload gagal",
+          title: isIndonesian ? "Upload gagal" : "Upload failed",
           description: friendly,
           variant: "error",
         });
@@ -1212,13 +1352,13 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         clearTimeout(timeoutId);
       }
     };
-  }, [activeJobId, toast]);
+  }, [activeJobId, errorCopyByStage, isIndonesian, toast]);
 
   return (
     <>
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="receipt-file">Gambar struk</Label>
+          <Label htmlFor="receipt-file">{isIndonesian ? "Gambar struk" : "Receipt image"}</Label>
           <Input
             ref={fileInputRef}
             id="receipt-file"
@@ -1241,27 +1381,43 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           >
             {previewImageUrl ? (
               <div className="w-full max-w-md overflow-hidden rounded-md border border-border/60 bg-background/60">
-                <img src={previewImageUrl} alt="Preview struk" className="h-56 w-full object-cover" />
+                <img
+                  src={previewImageUrl}
+                  alt={isIndonesian ? "Preview struk" : "Receipt preview"}
+                  className="h-56 w-full object-cover"
+                />
               </div>
             ) : (
               <div className="space-y-2 text-muted-foreground">
-                <p className="text-base font-semibold text-foreground">Tarik & lepas struk di sini</p>
-                <p className="text-xs">atau klik untuk pilih dari perangkat</p>
+                <p className="text-base font-semibold text-foreground">
+                  {isIndonesian ? "Tarik & lepas struk di sini" : "Drag & drop receipt here"}
+                </p>
+                <p className="text-xs">
+                  {isIndonesian ? "atau klik untuk pilih dari perangkat" : "or click to choose from device"}
+                </p>
               </div>
             )}
             <p className="text-xs text-muted-foreground">
               {file
-                ? `Dipilih: ${file.name}`
+                ? (isIndonesian ? `Dipilih: ${file.name}` : `Selected: ${file.name}`)
                 : jobStatus?.sourceFilename
-                  ? `Terakhir diunggah: ${jobStatus.sourceFilename}`
-                  : "Format: JPG, PNG, WEBP, HEIC, HEIF, TIFF • Maks 10MB"}
+                  ? (isIndonesian
+                    ? `Terakhir diunggah: ${jobStatus.sourceFilename}`
+                    : `Last uploaded: ${jobStatus.sourceFilename}`)
+                  : isIndonesian
+                    ? "Format: JPG, PNG, WEBP, HEIC, HEIF, TIFF • Maks 10MB"
+                    : "Formats: JPG, PNG, WEBP, HEIC, HEIF, TIFF • Max 10MB"}
             </p>
           </div>
           <div
             className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-muted-foreground"
             id="receipt-dropzone-help"
           >
-            <span>Tarik file atau klik area di atas untuk memilih gambar struk.</span>
+            <span>
+              {isIndonesian
+                ? "Tarik file atau klik area di atas untuk memilih gambar struk."
+                : "Drag a file or click the area above to choose a receipt image."}
+            </span>
             <Button
               type="button"
               variant="outline"
@@ -1271,13 +1427,13 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                 setCameraError(null);
               }}
             >
-              Scan dari kamera
+              {isIndonesian ? "Scan dari kamera" : "Scan from camera"}
             </Button>
           </div>
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="receipt-account">Metode bayar</Label>
+          <Label htmlFor="receipt-account">{isIndonesian ? "Metode bayar" : "Payment account"}</Label>
           <select
             id="receipt-account"
             name="accountId"
@@ -1288,7 +1444,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             required
           >
             <option value="" disabled>
-              Pilih akun pembayaran
+              {isIndonesian ? "Pilih akun pembayaran" : "Select a payment account"}
             </option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
@@ -1298,17 +1454,21 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           </select>
           {hasAccounts ? (
             <p className="text-xs text-muted-foreground">
-              Transaksi akan dicatat ke akun ini.
+              {isIndonesian
+                ? "Transaksi akan dicatat ke akun ini."
+                : "The transaction will post to this account."}
             </p>
           ) : (
             <p className="text-xs text-destructive">
-              Tambahkan akun dulu di menu Accounts sebelum scan struk.
+              {isIndonesian
+                ? "Tambahkan akun dulu di menu Accounts sebelum scan struk."
+                : "Add an account in the Accounts tab before scanning receipts."}
             </p>
           )}
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="receipt-currency">Mata uang</Label>
+          <Label htmlFor="receipt-currency">{isIndonesian ? "Mata uang" : "Currency"}</Label>
           <select
             id="receipt-currency"
             name="currency"
@@ -1328,17 +1488,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="receipt-locale">Locale teks</Label>
+          <Label htmlFor="receipt-locale">{isIndonesian ? "Locale teks" : "Text locale"}</Label>
           <Input
             id="receipt-locale"
-            value={locale}
-            onChange={(event) => setLocale(event.target.value)}
-            placeholder="id-ID"
+            value={ocrLocale}
+            onChange={(event) => setOcrLocale(event.target.value)}
+            placeholder={isIndonesian ? "id-ID" : "en-US"}
           />
         </div>
 
         <div className="space-y-2">
-          <Label>Metode pemrosesan</Label>
+          <Label>{isIndonesian ? "Metode pemrosesan" : "Processing mode"}</Label>
           <div className="grid gap-2 sm:grid-cols-2">
             <label
               className={`flex cursor-pointer flex-col rounded-md border p-3 text-sm transition-colors ${processingMode === "enhanced" ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
@@ -1353,10 +1513,14 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   disabled={isBusy}
                   className="h-4 w-4 border-input text-primary focus:outline-none"
                 />
-                <span className="font-medium text-foreground">Disempurnakan (disarankan)</span>
+                <span className="font-medium text-foreground">
+                  {isIndonesian ? "Disempurnakan (disarankan)" : "Enhanced (recommended)"}
+                </span>
               </div>
               <span className="mt-1 text-xs text-muted-foreground">
-                Membersihkan gambar dan menjalankan OCR sebelum dikirim ke LLM.
+                {isIndonesian
+                  ? "Membersihkan gambar dan menjalankan OCR sebelum dikirim ke LLM."
+                  : "Cleans up the image and runs OCR before sending it to the LLM."}
               </span>
             </label>
             <label
@@ -1372,10 +1536,14 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   disabled={isBusy}
                   className="h-4 w-4 border-input text-primary focus:outline-none"
                 />
-                <span className="font-medium text-foreground">Langsung ke LLM</span>
+                <span className="font-medium text-foreground">
+                  {isIndonesian ? "Langsung ke LLM" : "Direct to LLM"}
+                </span>
               </div>
               <span className="mt-1 text-xs text-muted-foreground">
-                Melewati preprocessing dan OCR; cocok untuk percobaan cepat.
+                {isIndonesian
+                  ? "Melewati preprocessing dan OCR; cocok untuk percobaan cepat."
+                  : "Skips preprocessing and OCR - useful for quick experiments."}
               </span>
             </label>
           </div>
@@ -1385,22 +1553,33 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           <div className="flex flex-wrap items-center gap-3">
             <Button type="submit" disabled={isBusy || !hasAccounts}>
               {state.status === "uploading"
-                ? "Mengunggah..."
+                ? isIndonesian
+                  ? "Mengunggah..."
+                  : "Uploading..."
                 : state.status === "tracking"
-                  ? "Memproses..."
-                  : "Scan struk"}
+                  ? isIndonesian
+                    ? "Memproses..."
+                    : "Processing..."
+                  : isIndonesian
+                    ? "Scan struk"
+                    : "Scan receipt"}
             </Button>
             {statusLabel ? (
               <p className="text-xs text-muted-foreground">
                 {statusLabel}
                 {jobStatus?.receipt ? (
                   <>
-                    {" "}• ID struk:
+                    {" "}
+                    {isIndonesian ? "• ID struk:" : "• Receipt ID:"}
                     {" "}
                     <span className="font-mono">{jobStatus.receipt.id}</span>
                   </>
                 ) : null}
-                {warnings.length > 0 ? ` • ${warnings.length} catatan` : null}
+                {warnings.length > 0
+                  ? isIndonesian
+                    ? ` • ${warnings.length} catatan`
+                    : ` • ${warnings.length} note${warnings.length > 1 ? "s" : ""}`
+                  : null}
               </p>
             ) : null}
             {state.status === "error" ? (
@@ -1413,7 +1592,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur">
             <div className="w-full max-w-md rounded-lg border border-border/60 bg-background shadow-lg">
               <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-                <p className="text-sm font-semibold">Tangkap foto struk</p>
+                <p className="text-sm font-semibold">
+                  {isIndonesian ? "Tangkap foto struk" : "Capture receipt photo"}
+                </p>
                 <Button
                   type="button"
                   size="sm"
@@ -1421,7 +1602,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   onClick={handleCloseCamera}
                   disabled={isCapturing}
                 >
-                  Tutup
+                  {isIndonesian ? "Tutup" : "Close"}
                 </Button>
               </div>
               <div className="flex flex-col gap-3 px-4 py-4">
@@ -1434,7 +1615,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   ) : null}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Pastikan pencahayaan cukup dan struk memenuhi bingkai. Tekan capture saat siap.
+                  {isIndonesian
+                    ? "Pastikan pencahayaan cukup dan struk memenuhi bingkai. Tekan capture saat siap."
+                    : "Ensure good lighting and keep the receipt within frame. Press capture when ready."}
                 </p>
                 <div className="flex items-center justify-end gap-2">
                   <Button
@@ -1443,14 +1626,20 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                     onClick={handleCloseCamera}
                     disabled={isCapturing}
                   >
-                    Batal
+                    {isIndonesian ? "Batal" : "Cancel"}
                   </Button>
                   <Button
                     type="button"
                     onClick={handleCapture}
                     disabled={Boolean(cameraError) || isCapturing}
                   >
-                    {isCapturing ? "Menyimpan..." : "Ambil foto"}
+                    {isCapturing
+                      ? isIndonesian
+                        ? "Menyimpan..."
+                        : "Saving..."
+                      : isIndonesian
+                        ? "Ambil foto"
+                        : "Capture photo"}
                   </Button>
                 </div>
               </div>
@@ -1464,13 +1653,19 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         <section className="mt-6 space-y-6 rounded-lg border border-border/70 bg-card/95 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-foreground">Tinjau hasil scan</h2>
-              <p className="text-sm text-muted-foreground">Perbarui detail sebelum membuat transaksi.</p>
+              <h2 className="text-lg font-semibold text-foreground">
+                {isIndonesian ? "Tinjau hasil scan" : "Review scan results"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {isIndonesian
+                  ? "Perbarui detail sebelum membuat transaksi."
+                  : "Update any details before creating a transaction."}
+              </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
               {receiptConfidenceLabel ? (
                 <span className="rounded-full border border-border/70 px-3 py-1">
-                  Akurasi OCR: {receiptConfidenceLabel}
+                  {isIndonesian ? "Akurasi OCR:" : "OCR confidence:"} {receiptConfidenceLabel}
                 </span>
               ) : null}
               {receiptResult?.id ? (
@@ -1482,16 +1677,24 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             <div className="space-y-4">
               <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/20">
                 {previewImageUrl ? (
-                  <img src={previewImageUrl} alt="Hasil foto struk" className="w-full max-h-[420px] object-cover" />
+                  <img
+                    src={previewImageUrl}
+                    alt={isIndonesian ? "Hasil foto struk" : "Captured receipt photo"}
+                    className="w-full max-h-[420px] object-cover"
+                  />
                 ) : (
                   <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                    Preview tidak tersedia. Unggah ulang untuk melihat gambar.
+                    {isIndonesian
+                      ? "Preview tidak tersedia. Unggah ulang untuk melihat gambar."
+                      : "Preview unavailable. Upload again to view the image."}
                   </div>
                 )}
               </div>
               {reviewWarnings.length > 0 ? (
                 <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-200">
-                  <p className="text-sm font-medium">Catatan sistem</p>
+                  <p className="text-sm font-medium">
+                    {isIndonesian ? "Catatan sistem" : "System notes"}
+                  </p>
                   <ul className="mt-2 list-disc space-y-1 pl-4">
                     {reviewWarnings.map((warning) => (
                       <li key={warning}>{warning}</li>
@@ -1503,17 +1706,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-merchant">Nama toko</Label>
+                  <Label htmlFor="receipt-merchant">{isIndonesian ? "Nama toko" : "Merchant"}</Label>
                   <Input
                     id="receipt-merchant"
                     value={receiptDraft?.merchantName ?? ""}
                     onChange={(event) => handleDraftChange("merchantName", event.target.value)}
-                    placeholder="Nama merchant"
+                    placeholder={isIndonesian ? "Nama merchant" : "Merchant name"}
                     disabled={isCreatingTransaction}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-date">Tanggal</Label>
+                  <Label htmlFor="receipt-date">{isIndonesian ? "Tanggal" : "Date"}</Label>
                   <Input
                     id="receipt-date"
                     type="date"
@@ -1526,7 +1729,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-currency-preview">Mata uang</Label>
+                  <Label htmlFor="receipt-currency-preview">{isIndonesian ? "Mata uang" : "Currency"}</Label>
                   <select
                     id="receipt-currency-preview"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -1542,19 +1745,19 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-payment">Metode bayar</Label>
+                  <Label htmlFor="receipt-payment">{isIndonesian ? "Metode bayar" : "Payment method"}</Label>
                   <Input
                     id="receipt-payment"
                     value={receiptDraft?.paymentMethod ?? ""}
                     onChange={(event) => handleDraftChange("paymentMethod", event.target.value)}
-                    placeholder="Contoh: Tunai / Kartu"
+                    placeholder={isIndonesian ? "Contoh: Tunai / Kartu" : "e.g. Cash / Card"}
                     disabled={isCreatingTransaction}
                   />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-total">Total</Label>
+                  <Label htmlFor="receipt-total">{isIndonesian ? "Total" : "Total"}</Label>
                   <Input
                     id="receipt-total"
                     inputMode="decimal"
@@ -1570,7 +1773,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   ) : null}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-subtotal">Subtotal</Label>
+                  <Label htmlFor="receipt-subtotal">{isIndonesian ? "Subtotal" : "Subtotal"}</Label>
                   <Input
                     id="receipt-subtotal"
                     inputMode="decimal"
@@ -1588,7 +1791,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-tax">Pajak</Label>
+                  <Label htmlFor="receipt-tax">{isIndonesian ? "Pajak" : "Tax"}</Label>
                   <Input
                     id="receipt-tax"
                     inputMode="decimal"
@@ -1604,7 +1807,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   ) : null}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-discount">Diskon</Label>
+                  <Label htmlFor="receipt-discount">{isIndonesian ? "Diskon" : "Discount"}</Label>
                   <Input
                     id="receipt-discount"
                     inputMode="decimal"
@@ -1621,13 +1824,13 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="receipt-notes">Catatan</Label>
+                <Label htmlFor="receipt-notes">{isIndonesian ? "Catatan" : "Notes"}</Label>
                 <textarea
                   id="receipt-notes"
                   className={TEXTAREA_BASE_CLASSES}
                   value={receiptDraft?.notes ?? ""}
                   onChange={(event) => handleDraftChange("notes", event.target.value)}
-                  placeholder="Catatan tambahan (opsional)"
+                  placeholder={isIndonesian ? "Catatan tambahan (opsional)" : "Additional notes (optional)"}
                   disabled={isCreatingTransaction}
                 />
               </div>
@@ -1638,7 +1841,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   onClick={() => handleResetAfterSuccess()}
                   disabled={isCreatingTransaction}
                 >
-                  Unggah struk baru
+                  {isIndonesian ? "Unggah struk baru" : "Upload another receipt"}
                 </Button>
                 <Button
                   type="button"
@@ -1648,7 +1851,13 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                   }}
                   disabled={!canCreateTransaction || isCreatingTransaction}
                 >
-                  {isCreatingTransaction ? "Menyimpan..." : "Buat transaksi"}
+                  {isCreatingTransaction
+                    ? isIndonesian
+                      ? "Menyimpan..."
+                      : "Saving..."
+                    : isIndonesian
+                      ? "Buat transaksi"
+                      : "Create transaction"}
                 </Button>
               </div>
             </div>
@@ -1659,7 +1868,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <DialogContent className="max-w-lg space-y-4">
           <DialogHeader>
-            <DialogTitle>Buat transaksi dari struk</DialogTitle>
+            <DialogTitle>
+              {isIndonesian ? "Buat transaksi dari struk" : "Create transaction from receipt"}
+            </DialogTitle>
           </DialogHeader>
           <form
             action={createTransactionFormAction}
@@ -1668,7 +1879,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           >
             <input type="hidden" name="type" value="expense" />
             <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-account">Akun</Label>
+              <Label htmlFor="receipt-dialog-account">{isIndonesian ? "Akun" : "Account"}</Label>
               <select
                 id="receipt-dialog-account"
                 name="accountId"
@@ -1678,7 +1889,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                 disabled={isCreatingTransaction}
               >
                 <option value="" disabled>
-                  Pilih akun pembayaran
+                  {isIndonesian ? "Pilih akun pembayaran" : "Select a payment account"}
                 </option>
                 {accounts.map((accountOption) => (
                   <option key={accountOption.id} value={accountOption.id}>
@@ -1688,7 +1899,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               </select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-amount">Jumlah</Label>
+              <Label htmlFor="receipt-dialog-amount">{isIndonesian ? "Jumlah" : "Amount"}</Label>
               <Input
                 id="receipt-dialog-amount"
                 name="amount"
@@ -1705,7 +1916,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               ) : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-date">Tanggal</Label>
+              <Label htmlFor="receipt-dialog-date">{isIndonesian ? "Tanggal" : "Date"}</Label>
               <Input
                 id="receipt-dialog-date"
                 name="occurredAt"
@@ -1716,23 +1927,29 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-description">Deskripsi</Label>
+              <Label htmlFor="receipt-dialog-description">{isIndonesian ? "Deskripsi" : "Description"}</Label>
               <Input
                 id="receipt-dialog-description"
                 name="description"
                 defaultValue={defaultDescription}
-                placeholder="Judul transaksi"
+                placeholder={isIndonesian ? "Judul transaksi" : "Transaction title"}
                 disabled={isCreatingTransaction}
               />
             </div>
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="ghost" disabled={isCreatingTransaction}>
-                  Batal
+                  {isIndonesian ? "Batal" : "Cancel"}
                 </Button>
               </DialogClose>
               <Button type="submit" disabled={isCreatingTransaction || !canCreateTransaction}>
-                {isCreatingTransaction ? "Menyimpan..." : "Simpan transaksi"}
+                {isCreatingTransaction
+                  ? isIndonesian
+                    ? "Menyimpan..."
+                    : "Saving..."
+                  : isIndonesian
+                    ? "Simpan transaksi"
+                    : "Save transaction"}
               </Button>
             </DialogFooter>
           </form>
@@ -1744,7 +1961,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
           <div className="rounded-lg border border-border/60 bg-background p-4 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col">
-                <p className="text-sm font-semibold text-foreground">{displayStep?.title ?? "Memproses struk"}</p>
+                <p className="text-sm font-semibold text-foreground">
+                  {displayStep?.title ?? (isIndonesian ? "Memproses struk" : "Processing receipt")}
+                </p>
                 {displayStep ? (
                   <span className="text-[11px] text-muted-foreground">{formatStageRange(displayStep.range)}</span>
                 ) : null}
@@ -1760,16 +1979,22 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             <p className="mt-2 text-xs text-muted-foreground">{stageMessage}</p>
             {lowConfidenceHint ? (
               <p className="mt-2 text-xs text-amber-500">
-                Gambar kurang jelas. Coba foto struk di tempat terang.
+                {isIndonesian
+                  ? "Gambar kurang jelas. Coba foto struk di tempat terang."
+                  : "Image is unclear. Try capturing the receipt in brighter lighting."}
               </p>
             ) : null}
             {previewImageUrl ? (
               <div className="mt-3 overflow-hidden rounded-md border border-border/60 bg-muted/50">
-                <img src={previewImageUrl} alt="Preview struk" className="h-24 w-full object-cover" />
+                <img
+                  src={previewImageUrl}
+                  alt={isIndonesian ? "Preview struk" : "Receipt preview"}
+                  className="h-24 w-full object-cover"
+                />
               </div>
             ) : null}
             <ul className="mt-3 space-y-1 text-xs">
-              {PROGRESS_STEPS.map((step) => {
+              {progressSteps.map((step) => {
                 const status = stageState(step.id);
                 const indicatorClass =
                   status === "done"
@@ -1811,10 +2036,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                     setIsProgressVisible(false);
                   }}
                 >
-                  Lihat detail
+                  {isIndonesian ? "Lihat detail" : "View details"}
                 </Button>
                 <Button type="button" size="sm" onClick={handleResetAfterSuccess}>
-                  Tambah struk lagi
+                  {isIndonesian ? "Tambah struk lagi" : "Scan another receipt"}
                 </Button>
               </div>
             ) : null}
@@ -1833,7 +2058,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                     lastProgressStageRef.current = "uploading";
                   }}
                 >
-                  Coba lagi
+                  {isIndonesian ? "Coba lagi" : "Try again"}
                 </Button>
               </div>
             ) : null}
