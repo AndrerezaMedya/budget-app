@@ -76,6 +76,11 @@ export default async function BudgetsPage({
   const totalSpent = budgets.reduce((sum, budget) => sum + budget.spentMinor, 0);
   const periodLabel = formatPeriodLabel(effectivePeriod, locale);
 
+  const budgetsSubheading = t("budgets.subheading");
+  const plannedCaption = t("budgets.stats.planned.caption");
+  const spentCaption = t("budgets.stats.spent.caption");
+  const emptyDescription = t("budgets.empty.description");
+
   const translateKey = (key: string | null, fallback: string) =>
     key ? t(key as Parameters<typeof t>[0]) : fallback;
 
@@ -94,7 +99,7 @@ export default async function BudgetsPage({
         <div>
           <h1 className="text-2xl font-semibold">{t("budgets.heading")}</h1>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-            <p>{t("budgets.subheading")}</p>
+            {budgetsSubheading ? <p>{budgetsSubheading}</p> : null}
             <Badge variant="outline" className="bg-muted/40 text-xs uppercase tracking-wide">
               {periodLabel}
             </Badge>
@@ -113,9 +118,9 @@ export default async function BudgetsPage({
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{formatCurrency(totalPlanned)}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("budgets.stats.planned.caption")}
-            </p>
+            {plannedCaption ? (
+              <p className="mt-2 text-xs text-muted-foreground">{plannedCaption}</p>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -127,9 +132,9 @@ export default async function BudgetsPage({
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{formatCurrency(totalSpent)}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("budgets.stats.spent.caption")}
-            </p>
+            {spentCaption ? (
+              <p className="mt-2 text-xs text-muted-foreground">{spentCaption}</p>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -156,7 +161,9 @@ export default async function BudgetsPage({
           <Card className="md:col-span-2 xl:col-span-3">
             <CardHeader>
               <CardTitle>{t("budgets.empty.title")}</CardTitle>
-              <CardDescription>{t("budgets.empty.description")}</CardDescription>
+              {emptyDescription ? (
+                <CardDescription>{emptyDescription}</CardDescription>
+              ) : null}
             </CardHeader>
           </Card>
         ) : (
