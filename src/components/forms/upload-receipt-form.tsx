@@ -52,7 +52,7 @@ const TEXTAREA_BASE_CLASSES =
   "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const DROPZONE_BASE_CLASSES =
-  "relative flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "relative flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-6 sm:py-10";
 const PROGRESS_STAGE_ORDER: ReceiptProgressStage[] = [
   "uploading",
   "enhancing",
@@ -797,7 +797,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     && activeProgressStage !== "failed";
 
   const previewImageUrl = previewUrl ?? storagePreviewUrl;
-  const dropzoneClasses = `${DROPZONE_BASE_CLASSES} w-full max-w-full ${isDragActive ? "border-primary/80 bg-primary/10 shadow-sm" : "hover:border-primary/60 hover:bg-primary/5"}`;
+  const dropzoneClasses = `${DROPZONE_BASE_CLASSES} ${isDragActive ? "border-primary/80 bg-primary/10 shadow-sm" : "hover:border-primary/60 hover:bg-primary/5"}`;
   const receiptResult = jobStatus?.receipt ?? null;
   const receiptConfidenceLabel =
     typeof receiptResult?.confidence === "number" && Number.isFinite(receiptResult.confidence)
@@ -1381,7 +1381,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             aria-describedby="receipt-dropzone-help"
           >
             {previewImageUrl ? (
-              <div className="w-full max-w-md overflow-hidden rounded-md border border-border/60 bg-background/60">
+              <div className="w-full max-w-full overflow-hidden rounded-md border border-border/60 bg-background/60">
                 <img
                   src={previewImageUrl}
                   alt={isIndonesian ? "Preview struk" : "Receipt preview"}
@@ -1591,7 +1591,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
         {isCameraOpen ? (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur">
-            <div className="w-full max-w-md rounded-lg border border-border/60 bg-background shadow-lg">
+            <div className="w-full max-w-full rounded-lg border border-border/60 bg-background shadow-lg sm:max-w-md">
               <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
                 <p className="text-sm font-semibold">
                   {isIndonesian ? "Tangkap foto struk" : "Capture receipt photo"}
