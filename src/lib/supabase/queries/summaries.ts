@@ -1,5 +1,5 @@
 import { getCurrentPeriodKey } from "@/lib/period";
-import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
+import { createSupabaseServerComponentClient, type SupabaseAuthClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 
 type SummaryRow = Database["public"]["Tables"]["category_monthly_summaries"]["Row"];
@@ -15,18 +15,30 @@ export type CategorySummary = {
   budgetMinor: number;
 };
 
+type FetchCategorySummariesOptions = {
+  client?: SupabaseAuthClient;
+  userId?: string;
+};
+
 export async function fetchCategorySummaries(
   period = getCurrentPeriodKey(),
+  options: FetchCategorySummariesOptions = {},
 ): Promise<CategorySummary[]> {
-  const supabase = await createSupabaseServerComponentClient();
-  const { data, error } = await supabase
+  const supabase = options.client ?? (await createSupabaseServerComponentClient());
+
+  let query = supabase
     .from("category_monthly_summaries")
     .select(
       `category_id, period, income_minor, expense_minor, available_minor, budget_minor,
         category:categories!category_monthly_summaries_category_id_fkey ( id, name )`
     )
-    .eq("period", period)
-    .order("expense_minor", { ascending: false });
+    .eq("period", period);
+
+  if (options.userId) {
+    query = query.eq("user_id", options.userId);
+  }
+
+  const { data, error } = await query.order("expense_minor", { ascending: false });
 
   if (error) {
     throw new Error(`Failed to load category summaries: ${error.message}`);

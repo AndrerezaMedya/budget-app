@@ -2,7 +2,7 @@ import { getCategoryByName, getSubcategoryByName } from "@/config/category-defin
 import { DEFAULT_CURRENCY } from "@/config/currencies";
 import { convertMinorToIdr, fetchRatesToIdr } from "@/lib/currency";
 import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
-import { createSupabaseServerComponentClient } from "@/lib/supabase/server";
+import { createSupabaseServerComponentClient, type SupabaseAuthClient } from "@/lib/supabase/server";
 import type { Database } from "@/types/supabase";
 
 type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];
@@ -78,7 +78,12 @@ function applyNetChange(row: Pick<TransactionRow, "type" | "transfer_direction" 
   return 0;
 }
 
-type SupabaseClient = Awaited<ReturnType<typeof createSupabaseServerComponentClient>>;
+type SupabaseClient = SupabaseAuthClient;
+
+type FetchDailyCashflowOptions = {
+  client?: SupabaseClient;
+  userId?: string;
+};
 
 export async function fetchTransactionSummary(
   options: SummaryOptions = {},
@@ -232,7 +237,10 @@ export async function fetchRecentTransactions(
   });
 }
 
-export async function fetchDailyCashflow(periodKey?: string): Promise<DailyCashflowPoint[]> {
+export async function fetchDailyCashflow(
+  periodKey?: string,
+  options: FetchDailyCashflowOptions = {},
+): Promise<DailyCashflowPoint[]> {
   const effectivePeriod = periodKey ?? getCurrentPeriodKey();
   const periodRange = getPeriodRange(effectivePeriod);
 
@@ -241,11 +249,17 @@ export async function fetchDailyCashflow(periodKey?: string): Promise<DailyCashf
   }
 
   const { periodStart, periodEnd } = periodRange;
-  const supabase = await createSupabaseServerComponentClient();
+  const supabase = options.client ?? (await createSupabaseServerComponentClient());
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("transactions")
-    .select("occurred_at, type, transfer_direction, amount_minor, currency")
+    .select("occurred_at, type, transfer_direction, amount_minor, currency");
+
+  if (options.userId) {
+    query = query.eq("user_id", options.userId);
+  }
+
+  const { data, error } = await query
     .gte("occurred_at", periodStart.toISOString())
     .lt("occurred_at", periodEnd.toISOString())
     .order("occurred_at", { ascending: true });
