@@ -26,14 +26,22 @@ export default async function AccountsPage() {
     0,
   );
 
+  const subheading = t("accounts.subheading");
+  const activeDescription = t("accounts.stats.active.description");
+  const activeCaption = t("accounts.stats.active.caption");
+  const balanceDescription = t("accounts.stats.balance.description");
+  const balanceCaption = t("accounts.stats.balance.caption");
+  const archivedDescription = t("accounts.stats.archived.description");
+  const archivedCaption = t("accounts.stats.archived.caption");
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{t("accounts.heading")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("accounts.subheading")}
-          </p>
+          {subheading ? (
+            <p className="text-sm text-muted-foreground">{subheading}</p>
+          ) : null}
         </div>
         <CreateAccountForm />
       </header>
@@ -45,15 +53,17 @@ export default async function AccountsPage() {
               <CardTitle className="text-sm font-medium">
                 {t("accounts.stats.active.title")}
               </CardTitle>
-              <CardDescription>{t("accounts.stats.active.description")}</CardDescription>
+              {activeDescription ? (
+                <CardDescription>{activeDescription}</CardDescription>
+              ) : null}
             </div>
             <Wallet className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{activeAccounts.length}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("accounts.stats.active.caption")}
-            </p>
+            {activeCaption ? (
+              <p className="mt-2 text-xs text-muted-foreground">{activeCaption}</p>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -62,7 +72,9 @@ export default async function AccountsPage() {
               <CardTitle className="text-sm font-medium">
                 {t("accounts.stats.balance.title")}
               </CardTitle>
-              <CardDescription>{t("accounts.stats.balance.description")}</CardDescription>
+              {balanceDescription ? (
+                <CardDescription>{balanceDescription}</CardDescription>
+              ) : null}
             </div>
             <Layers3 className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
@@ -70,9 +82,9 @@ export default async function AccountsPage() {
             <p className="text-3xl font-semibold">
               {formatCurrency(totalCurrentBalance)}
             </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("accounts.stats.balance.caption")}
-            </p>
+            {balanceCaption ? (
+              <p className="mt-2 text-xs text-muted-foreground">{balanceCaption}</p>
+            ) : null}
           </CardContent>
         </Card>
         <Card>
@@ -81,15 +93,17 @@ export default async function AccountsPage() {
               <CardTitle className="text-sm font-medium">
                 {t("accounts.stats.archived.title")}
               </CardTitle>
-              <CardDescription>{t("accounts.stats.archived.description")}</CardDescription>
+              {archivedDescription ? (
+                <CardDescription>{archivedDescription}</CardDescription>
+              ) : null}
             </div>
             <Clock className="size-5 text-muted-foreground" aria-hidden="true" />
           </CardHeader>
           <CardContent>
             <p className="text-3xl font-semibold">{archivedAccounts.length}</p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              {t("accounts.stats.archived.caption")}
-            </p>
+            {archivedCaption ? (
+              <p className="mt-2 text-xs text-muted-foreground">{archivedCaption}</p>
+            ) : null}
           </CardContent>
         </Card>
       </section>
