@@ -5,9 +5,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeftRight,
   CircleUserRound,
+  Ellipsis,
   Loader2,
   LogOut,
-  Menu,
   Scan,
   Plus,
 } from "lucide-react";
@@ -15,13 +15,21 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
+  type CSSProperties,
 } from "react";
 
-import { APP_ROUTES } from "@/config/navigation";
+import { APP_ROUTES, PRIMARY_APP_ROUTES, SECONDARY_APP_ROUTES } from "@/config/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { useAuth } from "@/components/providers/auth-provider";
 import { useI18n } from "@/components/providers/i18n-provider";
@@ -30,6 +38,9 @@ import { getCurrentPeriodKey } from "@/lib/period";
 
 export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const mobileNavRef = useRef<HTMLElement | null>(null);
+  const [mobileNavHeight, setMobileNavHeight] = useState(72);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -99,6 +110,21 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [pathname, t, user]);
 
+  const primaryNavRoutes = PRIMARY_APP_ROUTES;
+  const secondaryNavRoutes = SECONDARY_APP_ROUTES;
+
+  const spacingVars = useMemo(() => {
+    const navHeightValue = `${mobileNavHeight}px`;
+    return {
+      "--app-safe-area-bottom": "env(safe-area-inset-bottom, 0px)",
+      "--app-mobile-nav-height": navHeightValue,
+      "--app-mobile-nav-offset": "calc(var(--app-safe-area-bottom) + var(--app-mobile-nav-height))",
+      "--app-mobile-nav-padding": "calc(var(--app-safe-area-bottom) + 0.9rem)",
+      "--app-mobile-content-padding": "calc(var(--app-safe-area-bottom) + var(--app-mobile-nav-height) + 3.5rem)",
+      "--app-mobile-fab-offset": "calc(var(--app-safe-area-bottom) + var(--app-mobile-nav-height) + 1.5rem)",
+    } as CSSProperties;
+  }, [mobileNavHeight]);
+
   const prefetchRoute = useCallback(
     (href: string) => {
       if (!href) return;
@@ -136,6 +162,42 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
   }, [loading, pathname, router, user]);
 
+  useEffect(() => {
+    const navElement = mobileNavRef.current;
+    if (!navElement || typeof window === "undefined" || typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const updateNavHeight = () => {
+      const nextHeight = Math.round(navElement.offsetHeight);
+      if (!Number.isFinite(nextHeight)) {
+        return;
+      }
+      setMobileNavHeight((prev) => (Math.abs(prev - nextHeight) > 1 ? nextHeight : prev));
+    };
+
+    updateNavHeight();
+
+    const observer = new ResizeObserver(() => {
+      updateNavHeight();
+    });
+    observer.observe(navElement);
+
+    window.addEventListener("resize", updateNavHeight);
+    window.addEventListener("orientationchange", updateNavHeight);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", updateNavHeight);
+      window.removeEventListener("orientationchange", updateNavHeight);
+    };
+  }, []);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+    setActionMenuOpen(false);
+  }, [pathname]);
+
   if (loading) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background text-sm text-muted-foreground">
@@ -162,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex min-h-screen bg-background">
+  <div className="flex min-h-[100dvh] bg-background" style={spacingVars}>
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 w-72 border-r border-border bg-card transition-transform duration-200 ease-in-out lg:static lg:translate-x-0",
@@ -253,41 +315,33 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="border-b border-border bg-background">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="lg:hidden"
-                  onClick={() => setSidebarOpen((prev) => !prev)}
-                  aria-label={t("shell.nav.toggle")}
-                >
-                  <Menu className="size-5" aria-hidden="true" />
-                </Button>
-              </div>
+              <div className="flex items-center gap-2" />
               <div className="flex flex-wrap items-center justify-end gap-2">
-                {user && quickActions.length
-                  ? quickActions.map((action) => {
-                    const Icon = action.icon;
-                    return (
-                      <Button
-                        key={action.id}
-                        variant={action.variant}
-                        size="sm"
-                        asChild
-                        className="gap-2"
-                      >
-                        <Link
-                          href={action.href}
-                          onMouseEnter={() => prefetchRoute(action.href)}
-                          onFocus={() => prefetchRoute(action.href)}
+                {user && quickActions.length ? (
+                  <div className="hidden items-center gap-2 md:flex">
+                    {quickActions.map((action) => {
+                      const Icon = action.icon;
+                      return (
+                        <Button
+                          key={action.id}
+                          variant={action.variant}
+                          size="sm"
+                          asChild
+                          className="gap-2"
                         >
-                          <Icon className="size-4" aria-hidden="true" />
-                          <span>{action.label}</span>
-                        </Link>
-                      </Button>
-                    );
-                  })
-                  : null}
+                          <Link
+                            href={action.href}
+                            onMouseEnter={() => prefetchRoute(action.href)}
+                            onFocus={() => prefetchRoute(action.href)}
+                          >
+                            <Icon className="size-4" aria-hidden="true" />
+                            <span>{action.label}</span>
+                          </Link>
+                        </Button>
+                      );
+                    })}
+                  </div>
+                ) : null}
                 <ThemeToggle />
                 {user ? (
                   <Button variant="outline" size="sm" onClick={handleSignOut}>
@@ -318,7 +372,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="flex flex-1 flex-col bg-muted/30">
-          <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-6 sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12">
+          <div
+            className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pt-6 pb-[var(--app-mobile-content-padding)] sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 lg:pb-12 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12"
+          >
             {children}
           </div>
         </main>
@@ -328,7 +384,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           asChild
           variant="default"
           size="icon"
-          className="fixed bottom-6 right-6 z-40 h-14 w-14 rounded-full shadow-lg md:hidden"
+          className="fixed right-6 z-[70] h-14 w-14 rounded-full shadow-lg md:hidden"
+          style={{ bottom: "var(--app-mobile-fab-offset)" }}
         >
           <Link
             href={fabAction.href}
@@ -341,6 +398,120 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         </Button>
       ) : null}
+      <nav
+        ref={mobileNavRef}
+        className="fixed inset-x-0 bottom-0 z-[70] border-t border-border bg-background/95 pb-[var(--app-mobile-nav-padding)] pt-[0.35rem] backdrop-blur supports-[backdrop-filter]:bg-background/80 lg:hidden"
+        aria-label={t("shell.nav.toggle")}
+        style={{ minHeight: "var(--app-mobile-nav-offset)" }}
+      >
+        <div
+          className="mx-auto flex max-w-3xl items-center gap-1 px-3"
+        >
+          {primaryNavRoutes.map((route) => {
+            const isActive = pathname?.startsWith(route.href);
+            return (
+              <Link
+                key={route.href}
+                href={route.href}
+                className={cn(
+                  "flex flex-1 flex-col items-center justify-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium transition",
+                  isActive
+                    ? "text-primary"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+                aria-current={isActive ? "page" : undefined}
+                onMouseEnter={() => prefetchRoute(route.href)}
+                onFocus={() => prefetchRoute(route.href)}
+                onClick={() => setActionMenuOpen(false)}
+              >
+                <route.icon
+                  className={cn("size-5", isActive ? "text-primary" : "text-muted-foreground")}
+                  aria-hidden="true"
+                />
+                <span className="text-[10px] tracking-wide">{t(route.labelKey)}</span>
+              </Link>
+            );
+          })}
+          <button
+            type="button"
+            className="flex flex-1 flex-col items-center justify-center gap-1 rounded-full px-3 py-1 text-[11px] font-medium text-muted-foreground transition hover:text-foreground"
+            onClick={() => setActionMenuOpen(true)}
+            aria-haspopup="dialog"
+            aria-expanded={actionMenuOpen}
+          >
+            <Ellipsis className="size-5" aria-hidden="true" />
+            <span className="text-[10px] tracking-wide">{t("shell.nav.more")}</span>
+          </button>
+        </div>
+      </nav>
+      <Dialog open={actionMenuOpen} onOpenChange={setActionMenuOpen}>
+        <DialogContent className="max-w-md space-y-4 p-4">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="text-base font-semibold">
+              {t("shell.actions.title")}
+            </DialogTitle>
+          </DialogHeader>
+          {user && quickActions.length ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("shell.actions.quick")}
+              </p>
+              <div className="grid gap-2">
+                {quickActions.map((action) => {
+                  const Icon = action.icon;
+                  return (
+                    <Button
+                      key={action.id}
+                      variant={action.variant}
+                      className="w-full justify-start"
+                      asChild
+                    >
+                      <Link
+                        href={action.href}
+                        onMouseEnter={() => prefetchRoute(action.href)}
+                        onFocus={() => prefetchRoute(action.href)}
+                        onClick={() => setActionMenuOpen(false)}
+                      >
+                        <Icon className="size-4" aria-hidden="true" />
+                        <span>{action.label}</span>
+                      </Link>
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              {t("shell.actions.secondaryNav")}
+            </p>
+            <div className="grid gap-1">
+              {secondaryNavRoutes.map((route) => {
+                const isActive = pathname?.startsWith(route.href);
+                return (
+                  <Button
+                    key={route.href}
+                    variant={isActive ? "secondary" : "ghost"}
+                    className="w-full justify-start gap-2"
+                    asChild
+                  >
+                    <Link
+                      href={route.href}
+                      aria-current={isActive ? "page" : undefined}
+                      onMouseEnter={() => prefetchRoute(route.href)}
+                      onFocus={() => prefetchRoute(route.href)}
+                      onClick={() => setActionMenuOpen(false)}
+                    >
+                      <route.icon className="size-4" aria-hidden="true" />
+                      <span>{t(route.labelKey)}</span>
+                    </Link>
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
