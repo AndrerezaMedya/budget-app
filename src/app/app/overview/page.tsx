@@ -247,14 +247,16 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const fallbackError = apiErrorDetail ?? t("overview.charts.warning.unknownError");
   const fallbackMessages = fallbackWarning
     ? {
-        title: t("overview.charts.warning.title"),
-        description: t("overview.charts.warning.description"),
-        lastErrorLabel: t("overview.charts.warning.lastError", { error: fallbackError }),
-        retryLabel: t("overview.charts.warning.retry"),
-        retryingLabel: t("overview.charts.warning.retrying"),
-        retryFailedTemplate: t("overview.charts.warning.retryFailed", { error: "{{error}}" }),
-      }
+      title: t("overview.charts.warning.title"),
+      description: t("overview.charts.warning.description"),
+      lastErrorLabel: t("overview.charts.warning.lastError", { error: fallbackError }),
+      retryLabel: t("overview.charts.warning.retry"),
+      retryingLabel: t("overview.charts.warning.retrying"),
+      retryFailedTemplate: t("overview.charts.warning.retryFailed", { error: "{{error}}" }),
+    }
     : null;
+
+  const overviewSubheading = t("overview.subheading");
 
   return (
     <div className="space-y-8">
@@ -262,9 +264,11 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
         <h1 className="text-3xl font-semibold tracking-tight">
           {t("overview.heading")}
         </h1>
-        <p className="text-sm text-muted-foreground">
-          {t("overview.subheading")}
-        </p>
+        {overviewSubheading ? (
+          <p className="text-sm text-muted-foreground">
+            {overviewSubheading}
+          </p>
+        ) : null}
         <p className="text-xs font-medium text-muted-foreground/80">
           {t("overview.periodSwitcher.label")}
           <span className="ml-1 text-muted-foreground">{periodLabel}</span>
