@@ -6,7 +6,6 @@ import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
 import { getTranslator } from "@/lib/i18n";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchRecentTransactions } from "@/lib/supabase/queries/transactions";
-import { fetchRecentReceipts } from "@/lib/supabase/queries/receipts";
 import { fetchTags } from "@/lib/supabase/queries/tags";
 import { fetchProfilePreferences } from "@/lib/supabase/queries/profile";
 import { CreateTransactionForm } from "@/components/forms/create-transaction-form";
@@ -23,9 +22,7 @@ import {
   type TransactionsPresetOption,
 } from "@/components/forms/transactions-filter-presets";
 import { TransactionsSearchInput } from "@/components/forms/transactions-search-input";
-import { UploadReceiptForm } from "@/components/forms/upload-receipt-form";
 import { Badge } from "@/components/ui/badge";
-import type { BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -36,7 +33,6 @@ import {
 } from "@/components/ui/card";
 import type { TranslationKey } from "@/i18n/translations";
 import { listPredefinedCategoriesByType } from "@/config/category-definitions";
-import type { HydratedReceipt } from "@/lib/supabase/queries/receipts";
 import type { Database } from "@/types/supabase";
 
 type TableColumn = {
@@ -96,22 +92,6 @@ const TRANSACTION_TYPE_SET = new Set<TransactionType>(["expense", "income", "tra
 const SUPPORTED_FILTER_CURRENCIES = new Set(
   ACCOUNT_CURRENCY_OPTIONS.map((option) => option.value.toUpperCase()),
 );
-
-type ReceiptStatus = NonNullable<HydratedReceipt["jobStatus"]>;
-
-const RECEIPT_STATUS_LABEL_KEYS: Record<ReceiptStatus, TranslationKey> = {
-  pending: "transactions.receipts.status.pending",
-  processing: "transactions.receipts.status.processing",
-  succeeded: "transactions.receipts.status.succeeded",
-  failed: "transactions.receipts.status.failed",
-};
-
-const RECEIPT_STATUS_BADGE_VARIANT: Record<ReceiptStatus, BadgeProps["variant"]> = {
-  pending: "secondary",
-  processing: "secondary",
-  succeeded: "default",
-  failed: "destructive",
-};
 
 type SearchParamRecord = Record<string, string | string[]>;
 type SearchParamsInput = SearchParamRecord | Promise<SearchParamRecord> | undefined;
@@ -309,7 +289,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
   const fetchStartIso = toIsoStartOfDay(filters.startDate) ?? periodStart.toISOString();
   const fetchEndIso = toIsoStartOfNextDay(filters.endDate) ?? periodEnd.toISOString();
 
-  const [{ accounts }, tags, recentTransactions, profile, recentReceipts] = await Promise.all([
+  const [{ accounts }, tags, recentTransactions, profile] = await Promise.all([
     fetchAccounts(),
     fetchTags(),
     fetchRecentTransactions({
@@ -318,7 +298,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       endDate: fetchEndIso,
     }),
     fetchProfilePreferences(),
-    fetchRecentReceipts(8),
   ]);
 
   const availableAccounts = accounts.filter((account) => !account.archived_at);
@@ -727,29 +706,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
     : filteredNetChangeMinor < 0
       ? "transactions.accountSummary.delta.negative"
       : "transactions.accountSummary.delta.neutral";
-
-  const getReceiptStatusLabel = (status: HydratedReceipt["jobStatus"]) => {
-    if (!status) {
-      return t("transactions.receipts.status.unknown");
-    }
-    return t(RECEIPT_STATUS_LABEL_KEYS[status]);
-  };
-
-  const getReceiptStatusVariant = (status: HydratedReceipt["jobStatus"]): BadgeProps["variant"] => {
-    if (!status) {
-      return "outline";
-    }
-    return RECEIPT_STATUS_BADGE_VARIANT[status];
-  };
-
-  const formatReceiptConfidence = (confidence: HydratedReceipt["confidence"]) => {
-    if (confidence === null) {
-      return "—";
-    }
-    return t("transactions.receipts.confidence.value", {
-      value: Math.round(confidence * 100),
-    });
-  };
 
   const groupedTransactions = (() => {
     const groups = new Map<
@@ -1202,149 +1158,6 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
           </div>
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("transactions.receipts.title")}</CardTitle>
-          <CardDescription>{t("transactions.receipts.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <UploadReceiptForm accounts={receiptAccountOptions} />
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("transactions.receipts.recent.title")}</CardTitle>
-          <CardDescription>{t("transactions.receipts.recent.description")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentReceipts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {t("transactions.receipts.recent.empty")}
-            </p>
-          ) : (
-            <div className="space-y-4">
-              <div className="overflow-hidden rounded-lg border border-border">
-                <table className="hidden min-w-full divide-y divide-border text-sm md:table">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.status")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.merchant")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.total")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.issued")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.confidence")}
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        {t("transactions.receipts.table.header.actions")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {recentReceipts.map((receipt) => (
-                      <tr key={receipt.id}>
-                        <td className="px-4 py-3">
-                          <Badge variant={getReceiptStatusVariant(receipt.jobStatus)}>
-                            {getReceiptStatusLabel(receipt.jobStatus)}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-foreground">{receipt.merchantName}</div>
-                          {receipt.merchantAddress ? (
-                            <div className="text-xs text-muted-foreground">
-                              {receipt.merchantAddress}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-foreground">
-                          {formatCurrency(receipt.totalMinor, receipt.currency ?? DEFAULT_CURRENCY)}
-                          {receipt.warnings.length > 0 ? (
-                            <Badge variant="outline" className="ml-2">
-                              {t("transactions.receipts.warnings", {
-                                count: receipt.warnings.length,
-                              })}
-                            </Badge>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {receipt.purchaseAt
-                            ? formatDate(receipt.purchaseAt)
-                            : t("transactions.receipts.purchase.unknown")}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {formatReceiptConfidence(receipt.confidence)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button size="sm" variant="outline" disabled>
-                            {t("transactions.receipts.action.add")}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex flex-col gap-4 p-4 md:hidden">
-                  {recentReceipts.map((receipt) => (
-                    <div key={receipt.id} className="space-y-2 rounded-lg border border-border/60 p-4 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-foreground">{receipt.merchantName}</p>
-                          {receipt.purchaseAt ? (
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(receipt.purchaseAt)}
-                            </p>
-                          ) : (
-                            <p className="text-xs text-muted-foreground">
-                              {t("transactions.receipts.purchase.unknown")}
-                            </p>
-                          )}
-                        </div>
-                        <Badge variant={getReceiptStatusVariant(receipt.jobStatus)}>
-                          {getReceiptStatusLabel(receipt.jobStatus)}
-                        </Badge>
-                      </div>
-                      {receipt.merchantAddress ? (
-                        <p className="text-xs text-muted-foreground">{receipt.merchantAddress}</p>
-                      ) : null}
-                      <p className="text-base font-semibold text-foreground">
-                        {formatCurrency(receipt.totalMinor, receipt.currency ?? DEFAULT_CURRENCY)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatReceiptConfidence(receipt.confidence)}
-                      </p>
-                      {receipt.warnings.length > 0 ? (
-                        <Badge variant="outline" className="w-fit">
-                          {t("transactions.receipts.warnings", {
-                            count: receipt.warnings.length,
-                          })}
-                        </Badge>
-                      ) : null}
-                      <div className="pt-2">
-                        <Button size="sm" variant="outline" disabled className="w-full">
-                          {t("transactions.receipts.action.add")}
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <CreateTransactionForm
-        accounts={accountOptions}
-        tags={tagOptions}
-        defaultOccurredAt={defaultOccurredAt}
-        displayMode="floating"
-      />
     </div>
   );
 }
