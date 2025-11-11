@@ -109,36 +109,34 @@ export default async function ReportsPage({
             ) : null}
             {hasSummaries ? (
               <div className="overflow-hidden rounded-lg border border-border">
-                <div className="max-w-full overflow-x-auto">
-                  <table className="min-w-full divide-y divide-border text-sm">
+                <div className="hidden max-w-full overflow-x-auto md:block">
+                  <table className="min-w-full table-fixed divide-y divide-border text-sm">
                     <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                       <tr>
-                        <th className="px-4 py-3 text-left">{t("reports.table.header.category")}</th>
-                        <th className="px-4 py-3 text-right">{t("reports.table.header.budget")}</th>
-                        <th className="px-4 py-3 text-right">{t("reports.table.header.spent")}</th>
-                        <th className="px-4 py-3 text-right">{t("reports.table.header.variance")}</th>
+                        <th className="w-[38%] px-4 py-3 text-left">{t("reports.table.header.category")}</th>
+                        <th className="w-[20%] px-4 py-3 text-right">{t("reports.table.header.budget")}</th>
+                        <th className="w-[20%] px-4 py-3 text-right">{t("reports.table.header.spent")}</th>
+                        <th className="w-[22%] px-4 py-3 text-right">{t("reports.table.header.variance")}</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-card">
                       {summaries.map((summary) => (
                         <tr key={summary.categoryId}>
-                          <td className="px-4 py-3 text-muted-foreground">
+                          <td className="truncate px-4 py-3 text-muted-foreground" title={summary.categoryName}>
                             {summary.categoryName}
                           </td>
                           <td className="px-4 py-3 text-right text-muted-foreground">
-                            {summary.budgetMinor
-                              ? formatCurrency(summary.budgetMinor)
-                              : "—"}
+                            {summary.budgetMinor ? formatCurrency(summary.budgetMinor) : "—"}
                           </td>
                           <td className="px-4 py-3 text-right text-destructive">
                             {formatCurrency(summary.expenseMinor)}
                           </td>
                           <td
                             className={`px-4 py-3 text-right ${summary.availableMinor > 0
-                                ? "text-emerald-600"
-                                : summary.availableMinor < 0
-                                  ? "text-destructive"
-                                  : "text-muted-foreground"
+                              ? "text-emerald-600"
+                              : summary.availableMinor < 0
+                                ? "text-destructive"
+                                : "text-muted-foreground"
                               }`}
                           >
                             {formatCurrency(summary.availableMinor)}
@@ -147,6 +145,35 @@ export default async function ReportsPage({
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="grid gap-4 p-4 md:hidden">
+                  {summaries.map((summary) => (
+                    <div key={summary.categoryId} className="space-y-2 rounded-md border border-border/60 bg-card/95 p-4 text-sm shadow-sm">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium text-foreground">{summary.categoryName}</p>
+                        <Badge variant="outline" className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                          {formatCurrency(summary.expenseMinor)}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-muted-foreground">
+                        <span>{t("reports.table.header.budget")}</span>
+                        <span className="text-right text-foreground">
+                          {summary.budgetMinor ? formatCurrency(summary.budgetMinor) : "—"}
+                        </span>
+                        <span>{t("reports.table.header.variance")}</span>
+                        <span
+                          className={`text-right font-medium ${summary.availableMinor > 0
+                            ? "text-emerald-500"
+                            : summary.availableMinor < 0
+                              ? "text-destructive"
+                              : "text-muted-foreground"
+                            }`}
+                        >
+                          {formatCurrency(summary.availableMinor)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             ) : (
