@@ -224,7 +224,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-  <div className="flex min-h-[100dvh] bg-background" style={spacingVars}>
+    <div className="flex min-h-[100dvh] bg-background" style={spacingVars}>
       <aside
         className={cn(
           "fixed inset-y-0 left-0 z-40 w-72 border-r border-border bg-card transition-transform duration-200 ease-in-out lg:static lg:translate-x-0",
