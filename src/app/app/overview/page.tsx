@@ -2,6 +2,7 @@ import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { ArrowUpRight, PieChart, Wallet2 } from "lucide-react";
 
+import { resolveAppOrigin } from "@/lib/app-origin";
 import { formatCurrency } from "@/lib/format";
 import { getTranslator, type Translator } from "@/lib/i18n";
 import {
@@ -54,23 +55,17 @@ function formatDailySpend(amountMinor: number, translate: Translator) {
 }
 
 
-async function loadOverviewChartsFromApi(period?: string): Promise<OverviewCharts | null> {
+async function loadOverviewChartsFromApi(period?: string): Promise<OverviewCharts> {
   const headerStore = await headers();
   const cookieStore = await cookies();
 
-  const host =
-    headerStore.get("x-forwarded-host") ??
-    headerStore.get("host") ??
-    process.env.VERCEL_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    null;
-
-  if (!host) {
-    return null;
+  const origin = resolveAppOrigin(headerStore);
+  if (!origin) {
+    throw new Error(
+      "Overview charts API origin could not be resolved. Provide NEXT_PUBLIC_APP_URL or ensure host headers are forwarded.",
+    );
   }
 
-  const protocolHeader = headerStore.get("x-forwarded-proto");
-  const protocol = protocolHeader ?? (host.includes("localhost") ? "http" : "https");
   const query = period ? `?period=${encodeURIComponent(period)}` : "";
   const cookieHeader = cookieStore
     .getAll()
@@ -80,20 +75,29 @@ async function loadOverviewChartsFromApi(period?: string): Promise<OverviewChart
   const requestHeaders: HeadersInit = cookieHeader ? { cookie: cookieHeader } : {};
 
   try {
-    const response = await fetch(`${protocol}://${host}/api/overview/charts${query}`, {
+    const response = await fetch(`${origin}/api/overview/charts${query}`, {
       headers: requestHeaders,
       cache: "no-store",
     });
 
     if (!response.ok) {
-      return null;
+      const errorBody = await response.text().catch(() => "");
+      const detail = errorBody ? `: ${errorBody}` : "";
+      throw new Error(
+        `Overview charts API responded with status ${response.status}${detail}`,
+      );
     }
 
     const payload = (await response.json()) as { data?: OverviewCharts } | null;
-    return payload?.data ?? null;
+    if (!payload?.data) {
+      throw new Error("Overview charts API returned an unexpected payload shape.");
+    }
+
+    return payload.data;
   } catch (error) {
-    console.error("Failed to load overview charts via API", error);
-    return null;
+    throw error instanceof Error
+      ? error
+      : new Error("Unknown error contacting overview charts API");
   }
 }
 
@@ -106,9 +110,16 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
 
   const snapshot = await fetchOverviewSnapshot(resolvedSearchParams?.period);
-  const charts =
-    (await loadOverviewChartsFromApi(resolvedSearchParams?.period)) ??
-    (await fetchOverviewChartsFallback(resolvedSearchParams?.period));
+  let charts: OverviewCharts;
+  try {
+    charts = await loadOverviewChartsFromApi(resolvedSearchParams?.period);
+  } catch (error) {
+    console.warn(
+      "Overview charts API unavailable, falling back to Supabase query",
+      error,
+    );
+    charts = await fetchOverviewChartsFallback(resolvedSearchParams?.period);
+  }
 
   const periodLabel = formatPeriodLabel(snapshot.period, locale);
   const netCashflowTrend: MetricTrend =
