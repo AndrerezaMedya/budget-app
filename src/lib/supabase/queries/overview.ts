@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase/queries/transactions";
 import { fetchCategorySummaries, type CategorySummary } from "@/lib/supabase/queries/summaries";
 import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
+import type { SupabaseAuthClient } from "@/lib/supabase/server";
 
 export type OverviewSnapshot = {
   period: string;
@@ -24,13 +25,13 @@ export type OverviewSnapshot = {
   recentTransactions: number;
 };
 
-type ResolvedPeriod = {
+export type ResolvedPeriod = {
   period: string;
   periodStart: Date;
   periodEnd: Date;
 };
 
-function resolvePeriod(periodOverride?: string): ResolvedPeriod {
+export function resolveOverviewPeriod(periodOverride?: string): ResolvedPeriod {
   const defaultPeriod = getCurrentPeriodKey();
   let effectivePeriod = periodOverride ?? defaultPeriod;
 
@@ -52,7 +53,7 @@ function resolvePeriod(periodOverride?: string): ResolvedPeriod {
 }
 
 export const fetchOverviewSnapshot = cache(async (periodOverride?: string) => {
-  const { period, periodStart, periodEnd } = resolvePeriod(periodOverride);
+  const { period, periodStart, periodEnd } = resolveOverviewPeriod(periodOverride);
 
   const [accountsResult, budgets, transactionSummary, recentTransactionList] = await Promise.all([
     fetchAccounts(),
@@ -109,11 +110,20 @@ export type OverviewCharts = {
   categorySummaries: CategorySummary[];
 };
 
-export const fetchOverviewCharts = cache(async (periodOverride?: string) => {
-  const { period } = resolvePeriod(periodOverride);
+type FetchOverviewChartsOptions = {
+  client?: SupabaseAuthClient;
+  userId?: string;
+};
+
+export async function fetchOverviewCharts(
+  periodOverride?: string,
+  options: FetchOverviewChartsOptions = {},
+) {
+  const { period } = resolveOverviewPeriod(periodOverride);
+  const { client, userId } = options;
   const [cashflow, categorySummaries] = await Promise.all([
-    fetchDailyCashflow(period),
-    fetchCategorySummaries(period),
+    fetchDailyCashflow(period, { client, userId }),
+    fetchCategorySummaries(period, { client, userId }),
   ]);
 
   return {
@@ -121,4 +131,4 @@ export const fetchOverviewCharts = cache(async (periodOverride?: string) => {
     cashflow,
     categorySummaries,
   } satisfies OverviewCharts;
-});
+}
