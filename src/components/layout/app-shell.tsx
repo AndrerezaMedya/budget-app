@@ -75,6 +75,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     const currentPath = pathname ?? "";
 
+    if (currentPath.startsWith("/app/transactions")) {
+      return null;
+    }
+
     if (currentPath.startsWith("/app/budgets")) {
       return {
         href: "/app/budgets",
@@ -240,6 +244,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
+      {sidebarOpen ? (
+        <button
+          type="button"
+          aria-label={t("shell.nav.toggle")}
+          className="fixed inset-0 z-30 bg-background/70 backdrop-blur-sm transition-opacity lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      ) : null}
       <div className="flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
           <div className="mx-auto flex w-full max-w-6xl flex-col gap-3 px-4 py-3 sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12">
