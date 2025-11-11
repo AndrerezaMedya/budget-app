@@ -201,9 +201,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <route.icon className="size-4 shrink-0" aria-hidden="true" />
                   <span className="text-sm font-medium">{t(route.labelKey)}</span>
                 </div>
-                <span className="text-xs text-muted-foreground">
-                  {t(route.descriptionKey)}
-                </span>
               </Link>
             );
           })}
@@ -266,9 +263,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 >
                   <Menu className="size-5" aria-hidden="true" />
                 </Button>
-                <div className="text-sm text-muted-foreground">
-                  {t("brand.tagline")}
-                </div>
               </div>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 {user && quickActions.length

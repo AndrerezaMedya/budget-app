@@ -2,7 +2,6 @@ import type { LucideIcon } from "lucide-react";
 import {
   ChartNoAxesCombined,
   CreditCard,
-  FileSpreadsheet,
   LayoutDashboard,
   LineChart,
   ReceiptText,
@@ -55,12 +54,6 @@ export const APP_ROUTES: AppRoute[] = [
     descriptionKey: "nav.reports.description",
     href: "/app/reports",
     icon: LineChart,
-  },
-  {
-    labelKey: "nav.imports.label",
-    descriptionKey: "nav.imports.description",
-    href: "/app/imports",
-    icon: FileSpreadsheet,
   },
   {
     labelKey: "nav.settings.label",
