@@ -5,7 +5,7 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { getCurrentPeriodKey, getPeriodRange } from "@/lib/period";
 import { getTranslator } from "@/lib/i18n";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
-import { fetchRecentTransactions } from "@/lib/supabase/queries/transactions";
+import { fetchRecentTransactions, type HydratedTransaction } from "@/lib/supabase/queries/transactions";
 import { fetchTags } from "@/lib/supabase/queries/tags";
 import { fetchProfilePreferences } from "@/lib/supabase/queries/profile";
 import { CreateTransactionForm } from "@/components/forms/create-transaction-form";
@@ -232,6 +232,50 @@ function deriveSignedAmount(
   return amountMinor;
 }
 
+function collapseTransferPairs(transactions: HydratedTransaction[]) {
+  const preferredByGroup = new Map<string, HydratedTransaction>();
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "transfer" || !transaction.transferGroupId) {
+      continue;
+    }
+
+    const current = preferredByGroup.get(transaction.transferGroupId);
+    if (!current) {
+      preferredByGroup.set(transaction.transferGroupId, transaction);
+      continue;
+    }
+
+    const prefersOutgoing = current.transferDirection !== "out" && transaction.transferDirection === "out";
+    const prefersDefinedDirection = !current.transferDirection && Boolean(transaction.transferDirection);
+
+    if (prefersOutgoing || prefersDefinedDirection) {
+      preferredByGroup.set(transaction.transferGroupId, transaction);
+    }
+  }
+
+  const seenGroups = new Set<string>();
+  const collapsed: HydratedTransaction[] = [];
+
+  for (const transaction of transactions) {
+    if (transaction.type !== "transfer" || !transaction.transferGroupId) {
+      collapsed.push(transaction);
+      continue;
+    }
+
+    const groupId = transaction.transferGroupId;
+    if (seenGroups.has(groupId)) {
+      continue;
+    }
+    seenGroups.add(groupId);
+
+    const preferred = preferredByGroup.get(groupId) ?? transaction;
+    collapsed.push(preferred);
+  }
+
+  return collapsed;
+}
+
 function resolveAmountToneClass(value: number) {
   if (value > 0) {
     return "text-emerald-500";
@@ -376,7 +420,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
 
   const normalizedQuery = filters.query?.toLowerCase() ?? null;
 
-  const filteredTransactions = recentTransactions.filter((transaction) => {
+  const filteredTransactionsRaw = recentTransactions.filter((transaction) => {
     const transactionCurrency = (transaction.currency ?? DEFAULT_CURRENCY).toUpperCase();
     if (normalizedQuery) {
       const haystack = [
@@ -444,7 +488,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
     return true;
   });
 
-  filteredTransactions.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+  filteredTransactionsRaw.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
+
+  const filteredTransactions = !filters.accountId
+    ? collapseTransferPairs(filteredTransactionsRaw)
+    : filteredTransactionsRaw;
 
   const computeRollingStartDate = (days: number) => {
     const anchor = new Date(periodEnd);
