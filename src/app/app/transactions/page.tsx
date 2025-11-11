@@ -882,155 +882,155 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="hidden min-w-full divide-y divide-border text-sm md:table">
                 <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  {TABLE_COLUMNS.map((column) => (
-                    <th
-                      key={column.id}
-                      className={`px-4 py-3 ${column.align === "right" ? "text-right" : "text-left"}`}
-                    >
-                      {t(column.headerKey)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border bg-card">
-                {filteredTransactions.length === 0
-                  ? hasActiveFilters
-                    ? (
-                      <tr>
-                        <td
-                          colSpan={TABLE_COLUMNS.length}
-                          className="px-4 py-8 text-center text-sm text-muted-foreground"
-                        >
-                          {t("transactions.filters.noResults")}
-                        </td>
-                      </tr>
-                    )
-                    : Array.from({ length: EMPTY_STATE_ROWS }).map((_, index) => (
-                      <tr key={index}>
-                        {TABLE_COLUMNS.map((column) => (
-                          <td
-                            key={column.id}
-                            className={`px-4 py-4 text-muted-foreground ${column.align === "right" ? "text-right" : "text-left"}`}
-                          >
-                            {t(column.placeholderKey)}
-                          </td>
-                        ))}
-                      </tr>
-                    ))
-                  : groupedTransactions.map((group) => {
-                    const singleCurrencyTotal = group.totals.size === 1
-                      ? Array.from(group.totals.entries())[0]
-                      : null;
-
-                    return (
-                      <Fragment key={group.dateKey}>
-                        <tr className="bg-muted/40">
+                  <tr>
+                    {TABLE_COLUMNS.map((column) => (
+                      <th
+                        key={column.id}
+                        className={`px-4 py-3 ${column.align === "right" ? "text-right" : "text-left"}`}
+                      >
+                        {t(column.headerKey)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border bg-card">
+                  {filteredTransactions.length === 0
+                    ? hasActiveFilters
+                      ? (
+                        <tr>
                           <td
                             colSpan={TABLE_COLUMNS.length}
-                            className="px-4 py-2 text-left text-xs uppercase tracking-wide text-muted-foreground"
+                            className="px-4 py-8 text-center text-sm text-muted-foreground"
                           >
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-sm font-semibold text-foreground">
-                                {group.label}
-                              </span>
-                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                                <span>
-                                  {t("transactions.table.group.count", {
-                                    count: group.items.length,
-                                  })}
-                                </span>
-                                {singleCurrencyTotal ? (
-                                  <span className="font-semibold text-foreground">
-                                    {t("transactions.table.group.total", {
-                                      amount: formatCurrency(singleCurrencyTotal[1], singleCurrencyTotal[0]),
-                                    })}
-                                  </span>
-                                ) : group.totals.size > 1 ? (
-                                  <span>
-                                    {t("transactions.table.group.mixed", {
-                                      count: group.totals.size,
-                                    })}
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
+                            {t("transactions.filters.noResults")}
                           </td>
                         </tr>
-                        {group.items.map((transaction) => {
-                          const signedAmount = deriveSignedAmount(
-                            transaction.amountMinor,
-                            transaction.type,
-                            transaction.transferDirection,
-                          );
-                          const amountDisplay = formatCurrency(signedAmount, transaction.currency ?? undefined);
-                          const occurredOn = formatDate(transaction.occurredAt, locale);
+                      )
+                      : Array.from({ length: EMPTY_STATE_ROWS }).map((_, index) => (
+                        <tr key={index}>
+                          {TABLE_COLUMNS.map((column) => (
+                            <td
+                              key={column.id}
+                              className={`px-4 py-4 text-muted-foreground ${column.align === "right" ? "text-right" : "text-left"}`}
+                            >
+                              {t(column.placeholderKey)}
+                            </td>
+                          ))}
+                        </tr>
+                      ))
+                    : groupedTransactions.map((group) => {
+                      const singleCurrencyTotal = group.totals.size === 1
+                        ? Array.from(group.totals.entries())[0]
+                        : null;
 
-                          return (
-                            <tr key={transaction.id}>
-                              {TABLE_COLUMNS.map((column) => {
-                                let content: ReactNode = null;
+                      return (
+                        <Fragment key={group.dateKey}>
+                          <tr className="bg-muted/40">
+                            <td
+                              colSpan={TABLE_COLUMNS.length}
+                              className="px-4 py-2 text-left text-xs uppercase tracking-wide text-muted-foreground"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-sm font-semibold text-foreground">
+                                  {group.label}
+                                </span>
+                                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                                  <span>
+                                    {t("transactions.table.group.count", {
+                                      count: group.items.length,
+                                    })}
+                                  </span>
+                                  {singleCurrencyTotal ? (
+                                    <span className="font-semibold text-foreground">
+                                      {t("transactions.table.group.total", {
+                                        amount: formatCurrency(singleCurrencyTotal[1], singleCurrencyTotal[0]),
+                                      })}
+                                    </span>
+                                  ) : group.totals.size > 1 ? (
+                                    <span>
+                                      {t("transactions.table.group.mixed", {
+                                        count: group.totals.size,
+                                      })}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                          {group.items.map((transaction) => {
+                            const signedAmount = deriveSignedAmount(
+                              transaction.amountMinor,
+                              transaction.type,
+                              transaction.transferDirection,
+                            );
+                            const amountDisplay = formatCurrency(signedAmount, transaction.currency ?? undefined);
+                            const occurredOn = formatDate(transaction.occurredAt, locale);
 
-                                switch (column.id) {
-                                  case "date":
-                                    content = occurredOn;
-                                    break;
-                                  case "account":
-                                    content = transaction.account
-                                      ? `${transaction.account.name} (${(transaction.currency ?? DEFAULT_CURRENCY).toUpperCase()})`
-                                      : "—";
-                                    break;
-                                  case "category":
-                                    content = transaction.category?.name ?? "—";
-                                    break;
-                                  case "description":
-                                    content = transaction.description ?? "—";
-                                    break;
-                                  case "amount":
-                                    content = amountDisplay;
-                                    break;
-                                  case "actions":
-                                    content = (
-                                      <div className="flex justify-end gap-1">
-                                        {transaction.type !== "transfer" ? (
-                                          <EditTransactionButton
-                                            transaction={{
-                                              id: transaction.id,
-                                              description: transaction.description,
-                                              amountMinor: transaction.amountMinor,
-                                              currency: transaction.currency ?? DEFAULT_CURRENCY,
-                                              occurredAt: transaction.occurredAt,
-                                              accountId: transaction.accountId,
-                                              type: transaction.type,
-                                              categorySlug: transaction.categorySlug,
-                                              subcategorySlug: transaction.subcategorySlug,
-                                            }}
-                                            accounts={receiptAccountOptions}
+                            return (
+                              <tr key={transaction.id}>
+                                {TABLE_COLUMNS.map((column) => {
+                                  let content: ReactNode = null;
+
+                                  switch (column.id) {
+                                    case "date":
+                                      content = occurredOn;
+                                      break;
+                                    case "account":
+                                      content = transaction.account
+                                        ? `${transaction.account.name} (${(transaction.currency ?? DEFAULT_CURRENCY).toUpperCase()})`
+                                        : "—";
+                                      break;
+                                    case "category":
+                                      content = transaction.category?.name ?? "—";
+                                      break;
+                                    case "description":
+                                      content = transaction.description ?? "—";
+                                      break;
+                                    case "amount":
+                                      content = amountDisplay;
+                                      break;
+                                    case "actions":
+                                      content = (
+                                        <div className="flex justify-end gap-1">
+                                          {transaction.type !== "transfer" ? (
+                                            <EditTransactionButton
+                                              transaction={{
+                                                id: transaction.id,
+                                                description: transaction.description,
+                                                amountMinor: transaction.amountMinor,
+                                                currency: transaction.currency ?? DEFAULT_CURRENCY,
+                                                occurredAt: transaction.occurredAt,
+                                                accountId: transaction.accountId,
+                                                type: transaction.type,
+                                                categorySlug: transaction.categorySlug,
+                                                subcategorySlug: transaction.subcategorySlug,
+                                              }}
+                                              accounts={receiptAccountOptions}
+                                            />
+                                          ) : null}
+                                          <DeleteTransactionButton
+                                            transactionId={transaction.id}
+                                            description={transaction.description}
                                           />
-                                        ) : null}
-                                        <DeleteTransactionButton
-                                          transactionId={transaction.id}
-                                          description={transaction.description}
-                                        />
-                                      </div>
-                                    );
-                                    break;
-                                  default:
-                                    content = null;
-                                }
+                                        </div>
+                                      );
+                                      break;
+                                    default:
+                                      content = null;
+                                  }
 
-                                return (
-                                  <td key={column.id} className={`px-4 py-3 ${column.cellClass}`}>
-                                    {content}
-                                  </td>
-                                );
-                              })}
-                            </tr>
-                          );
-                        })}
-                      </Fragment>
-                    );
-                  })}
+                                  return (
+                                    <td key={column.id} className={`px-4 py-3 ${column.cellClass}`}>
+                                      {content}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </Fragment>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

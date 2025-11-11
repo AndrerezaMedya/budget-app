@@ -108,26 +108,26 @@ export default async function ReceiptsPage() {
                 <div className="hidden max-w-full overflow-x-auto md:block">
                   <table className="min-w-full table-fixed divide-y divide-border text-sm">
                     <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.status")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.merchant")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.total")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.issued")}
-                      </th>
-                      <th className="px-4 py-3 text-left">
-                        {t("transactions.receipts.table.header.confidence")}
-                      </th>
-                      <th className="px-4 py-3 text-right">
-                        {t("transactions.receipts.table.header.actions")}
-                      </th>
-                    </tr>
+                      <tr>
+                        <th className="px-4 py-3 text-left">
+                          {t("transactions.receipts.table.header.status")}
+                        </th>
+                        <th className="px-4 py-3 text-left">
+                          {t("transactions.receipts.table.header.merchant")}
+                        </th>
+                        <th className="px-4 py-3 text-left">
+                          {t("transactions.receipts.table.header.total")}
+                        </th>
+                        <th className="px-4 py-3 text-left">
+                          {t("transactions.receipts.table.header.issued")}
+                        </th>
+                        <th className="px-4 py-3 text-left">
+                          {t("transactions.receipts.table.header.confidence")}
+                        </th>
+                        <th className="px-4 py-3 text-right">
+                          {t("transactions.receipts.table.header.actions")}
+                        </th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-border bg-card">
                       {recentReceipts.map((receipt) => (
