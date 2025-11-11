@@ -51,13 +51,14 @@ export default async function ReportsPage({
     .filter((summary) => summary.expenseMinor > 0)
     .slice(0, 5);
   const hasExpenseBreakdown = hasSummaries && totalExpenseMinor > 0 && topExpenseSummaries.length > 0;
+  const reportsSubheading = t("reports.subheading");
 
   return (
     <div className="space-y-6">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{t("reports.heading")}</h1>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <p>{t("reports.subheading")}</p>
+          {reportsSubheading ? <p>{reportsSubheading}</p> : null}
           <Badge variant="outline" className="bg-muted/40 text-xs uppercase tracking-wide">
             {periodLabel}
           </Badge>
@@ -112,9 +113,9 @@ export default async function ReportsPage({
                   <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-4 py-3 text-left">{t("reports.table.header.category")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.income")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.expense")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.remaining")}</th>
+                      <th className="px-4 py-3 text-right">{t("reports.table.header.budget")}</th>
+                      <th className="px-4 py-3 text-right">{t("reports.table.header.spent")}</th>
+                      <th className="px-4 py-3 text-right">{t("reports.table.header.variance")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border bg-card">
@@ -123,13 +124,22 @@ export default async function ReportsPage({
                         <td className="px-4 py-3 text-muted-foreground">
                           {summary.categoryName}
                         </td>
-                        <td className="px-4 py-3 text-right text-emerald-600">
-                          {formatCurrency(summary.incomeMinor)}
+                        <td className="px-4 py-3 text-right text-muted-foreground">
+                          {summary.budgetMinor
+                            ? formatCurrency(summary.budgetMinor)
+                            : "—"}
                         </td>
                         <td className="px-4 py-3 text-right text-destructive">
                           {formatCurrency(summary.expenseMinor)}
                         </td>
-                        <td className="px-4 py-3 text-right text-foreground">
+                        <td
+                          className={`px-4 py-3 text-right ${summary.availableMinor > 0
+                              ? "text-emerald-600"
+                              : summary.availableMinor < 0
+                                ? "text-destructive"
+                                : "text-muted-foreground"
+                            }`}
+                        >
                           {formatCurrency(summary.availableMinor)}
                         </td>
                       </tr>
