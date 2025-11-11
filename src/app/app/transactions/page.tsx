@@ -252,6 +252,16 @@ function deriveSignedAmount(
   return amountMinor;
 }
 
+function resolveAmountToneClass(value: number) {
+  if (value > 0) {
+    return "text-emerald-500";
+  }
+  if (value < 0) {
+    return "text-destructive";
+  }
+  return "text-muted-foreground";
+}
+
 async function resolveSearchParams(input: SearchParamsInput): Promise<SearchParamRecord | undefined> {
   if (!input) {
     return undefined;
@@ -334,6 +344,12 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
     { value: "income" as TransactionType, label: t("transactions.type.income") },
     { value: "transfer" as TransactionType, label: t("transactions.type.transfer") },
   ];
+
+  const typeLabelMap: Record<TransactionType, string> = {
+    expense: t("transactions.type.expense"),
+    income: t("transactions.type.income"),
+    transfer: t("transactions.type.transfer"),
+  } as const;
 
   const translateCategoryName = (key: string | null | undefined, fallback: string) =>
     key ? t(key as Parameters<typeof t>[0]) : fallback;
@@ -772,6 +788,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
         label: formatDate(`${group.dateKey}T00:00:00.000Z`, locale),
       }));
   })();
+
+  const mobileTimeFormatter = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   return (
     <div className="space-y-6">
