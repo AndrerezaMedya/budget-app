@@ -280,6 +280,8 @@ async function resolveSearchParams(input: SearchParamsInput): Promise<SearchPara
 
 export default async function TransactionsPage({ searchParams }: { searchParams?: SearchParamsInput }) {
   const { t, locale } = await getTranslator();
+  const pageSubheading = t("transactions.page.subheading");
+  const recentListDescription = t("transactions.recent.description");
   const resolvedSearchParams = await resolveSearchParams(searchParams);
   const defaultPeriodKey = getCurrentPeriodKey();
   const requestedPeriodKey = getParamValue(resolvedSearchParams, "period") ?? defaultPeriodKey;
@@ -799,9 +801,11 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       <header className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">{t("transactions.page.heading")}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t("transactions.page.subheading")}
-          </p>
+          {pageSubheading ? (
+            <p className="text-sm text-muted-foreground">
+              {pageSubheading}
+            </p>
+          ) : null}
         </div>
       </header>
 
@@ -885,10 +889,10 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                 </p>
                 <p
                   className={`mt-1 text-lg font-semibold tabular-nums ${filteredNetChangeMinor > 0
-                      ? "text-emerald-500"
-                      : filteredNetChangeMinor < 0
-                        ? "text-destructive"
-                        : "text-foreground"
+                    ? "text-emerald-500"
+                    : filteredNetChangeMinor < 0
+                      ? "text-destructive"
+                      : "text-foreground"
                     }`}
                 >
                   {formatCurrency(filteredNetChangeMinor, accountCurrency)}
@@ -913,7 +917,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       <Card>
         <CardHeader>
           <CardTitle>{t("transactions.recent.title")}</CardTitle>
-          <CardDescription>{t("transactions.recent.description")}</CardDescription>
+          {recentListDescription ? (
+            <CardDescription>{recentListDescription}</CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent>
           <div className="overflow-hidden rounded-lg border border-border">
