@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
 } from "react";
@@ -1957,7 +1958,10 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       </Dialog>
 
       {isProgressVisible ? (
-        <div className="fixed bottom-6 right-6 z-50 w-80 max-w-full animate-in fade-in slide-in-from-bottom-2">
+        <div
+          className="fixed inset-x-4 bottom-[var(--receipt-progress-bottom)] z-[75] mx-auto w-auto max-w-sm animate-in fade-in slide-in-from-bottom-2 md:inset-auto md:right-6 md:bottom-6 md:w-80"
+          style={{ "--receipt-progress-bottom": "calc(var(--app-safe-area-bottom, env(safe-area-inset-bottom, 0px)) + var(--app-mobile-nav-height, 4.5rem) + 1.5rem)" } as CSSProperties}
+        >
           <div className="rounded-lg border border-border/60 bg-background p-4 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col">
