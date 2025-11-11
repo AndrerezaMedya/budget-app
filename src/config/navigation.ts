@@ -62,3 +62,18 @@ export const APP_ROUTES: AppRoute[] = [
     icon: Settings,
   },
 ];
+
+const PRIMARY_ROUTE_PATHS = [
+  "/app/overview",
+  "/app/transactions",
+  "/app/budgets",
+  "/app/accounts",
+] as const;
+
+export const PRIMARY_APP_ROUTES: AppRoute[] = PRIMARY_ROUTE_PATHS.map((path) =>
+  APP_ROUTES.find((route) => route.href === path),
+).filter((route): route is AppRoute => Boolean(route));
+
+export const SECONDARY_APP_ROUTES: AppRoute[] = APP_ROUTES.filter(
+  (route) => !PRIMARY_ROUTE_PATHS.includes(route.href as (typeof PRIMARY_ROUTE_PATHS)[number]),
+);
