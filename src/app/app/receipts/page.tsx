@@ -4,7 +4,6 @@ import type { TranslationKey } from "@/i18n/translations";
 import { getTranslator } from "@/lib/i18n";
 import { fetchAccounts } from "@/lib/supabase/queries/accounts";
 import { fetchRecentReceipts } from "@/lib/supabase/queries/receipts";
-import { UploadReceiptForm } from "@/components/forms/upload-receipt-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -16,6 +15,8 @@ import {
 } from "@/components/ui/card";
 import type { BadgeProps } from "@/components/ui/badge";
 import type { HydratedReceipt } from "@/lib/supabase/queries/receipts";
+
+import { UploadReceiptForm } from "@/components/forms/upload-receipt-form";
 
 type ReceiptStatus = NonNullable<HydratedReceipt["jobStatus"]>;
 
@@ -71,19 +72,21 @@ export default async function ReceiptsPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-full flex-col gap-6 pb-[var(--app-mobile-content-padding)] md:pb-12">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{t("receipts.page.heading")}</h1>
         <p className="text-sm text-muted-foreground">{t("receipts.page.subheading")}</p>
       </header>
 
-      <Card>
+      <Card className="overflow-hidden">
         <CardHeader>
           <CardTitle>{t("transactions.receipts.title")}</CardTitle>
           <CardDescription>{t("transactions.receipts.description")}</CardDescription>
         </CardHeader>
-        <CardContent>
-          <UploadReceiptForm accounts={receiptAccountOptions} />
+        <CardContent className="pb-3 md:pb-6">
+          <div className="max-h-[min(68vh,34rem)] overflow-y-auto pr-1 md:max-h-none md:overflow-visible">
+            <UploadReceiptForm accounts={receiptAccountOptions} />
+          </div>
         </CardContent>
       </Card>
 
@@ -98,10 +101,11 @@ export default async function ReceiptsPage() {
               {t("transactions.receipts.recent.empty")}
             </p>
           ) : (
-            <div className="space-y-4">
+            <div className="grid gap-4">
               <div className="overflow-hidden rounded-lg border border-border">
-                <table className="hidden min-w-full divide-y divide-border text-sm md:table">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                <div className="max-w-full overflow-x-auto">
+                  <table className="hidden min-w-full divide-y divide-border text-sm md:table md:table-fixed">
+                    <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
                     <tr>
                       <th className="px-4 py-3 text-left">
                         {t("transactions.receipts.table.header.status")}
@@ -122,56 +126,57 @@ export default async function ReceiptsPage() {
                         {t("transactions.receipts.table.header.actions")}
                       </th>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {recentReceipts.map((receipt) => (
-                      <tr key={receipt.id}>
-                        <td className="px-4 py-3">
-                          <Badge variant={getReceiptStatusVariant(receipt.jobStatus)}>
-                            {getReceiptStatusLabel(receipt.jobStatus)}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-foreground">{receipt.merchantName}</div>
-                          {receipt.merchantAddress ? (
-                            <div className="text-xs text-muted-foreground">
-                              {receipt.merchantAddress}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 font-semibold text-foreground">
-                          {formatCurrency(receipt.totalMinor, receipt.currency ?? DEFAULT_CURRENCY)}
-                          {receipt.warnings.length > 0 ? (
-                            <Badge variant="outline" className="ml-2">
-                              {t("transactions.receipts.warnings", {
-                                count: receipt.warnings.length,
-                              })}
+                    </thead>
+                    <tbody className="divide-y divide-border bg-card">
+                      {recentReceipts.map((receipt) => (
+                        <tr key={receipt.id}>
+                          <td className="px-4 py-3">
+                            <Badge variant={getReceiptStatusVariant(receipt.jobStatus)}>
+                              {getReceiptStatusLabel(receipt.jobStatus)}
                             </Badge>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {receipt.purchaseAt
-                            ? formatDate(receipt.purchaseAt)
-                            : t("transactions.receipts.purchase.unknown")}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {formatReceiptConfidence(receipt.confidence)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Button size="sm" variant="outline" disabled>
-                            {t("transactions.receipts.action.add")}
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                <div className="flex flex-col gap-4 p-4 md:hidden">
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="font-medium text-foreground">{receipt.merchantName}</div>
+                            {receipt.merchantAddress ? (
+                              <div className="text-xs text-muted-foreground">
+                                {receipt.merchantAddress}
+                              </div>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 font-semibold text-foreground">
+                            {formatCurrency(receipt.totalMinor, receipt.currency ?? DEFAULT_CURRENCY)}
+                            {receipt.warnings.length > 0 ? (
+                              <Badge variant="outline" className="ml-2">
+                                {t("transactions.receipts.warnings", {
+                                  count: receipt.warnings.length,
+                                })}
+                              </Badge>
+                            ) : null}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {receipt.purchaseAt
+                              ? formatDate(receipt.purchaseAt)
+                              : t("transactions.receipts.purchase.unknown")}
+                          </td>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {formatReceiptConfidence(receipt.confidence)}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <Button size="sm" variant="outline" disabled>
+                              {t("transactions.receipts.action.add")}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="grid gap-4 p-4 md:hidden">
                   {recentReceipts.map((receipt) => (
                     <div key={receipt.id} className="space-y-2 rounded-lg border border-border/60 p-4 text-sm">
                       <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-foreground">{receipt.merchantName}</p>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">{receipt.merchantName}</p>
                           {receipt.purchaseAt ? (
                             <p className="text-xs text-muted-foreground">
                               {formatDate(receipt.purchaseAt)}
