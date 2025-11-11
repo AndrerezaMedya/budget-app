@@ -62,3 +62,7 @@ export async function createSupabaseRouteHandlerClient() {
     allowCookieWrite: true,
   });
 }
+
+export type SupabaseAuthClient = SupabaseClient<Database>;
+export type SupabaseServerClient = Awaited<ReturnType<typeof createSupabaseServerComponentClient>>;
+export type SupabaseRouteClient = Awaited<ReturnType<typeof createSupabaseRouteHandlerClient>>;
