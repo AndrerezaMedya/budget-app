@@ -52,7 +52,7 @@ const TEXTAREA_BASE_CLASSES =
   "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
 const DROPZONE_BASE_CLASSES =
-  "relative flex cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "relative flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-6 py-10 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 const PROGRESS_STAGE_ORDER: ReceiptProgressStage[] = [
   "uploading",
   "enhancing",
@@ -797,7 +797,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     && activeProgressStage !== "failed";
 
   const previewImageUrl = previewUrl ?? storagePreviewUrl;
-  const dropzoneClasses = `${DROPZONE_BASE_CLASSES} ${isDragActive ? "border-primary/80 bg-primary/10 shadow-sm" : "hover:border-primary/60 hover:bg-primary/5"}`;
+  const dropzoneClasses = `${DROPZONE_BASE_CLASSES} w-full max-w-full ${isDragActive ? "border-primary/80 bg-primary/10 shadow-sm" : "hover:border-primary/60 hover:bg-primary/5"}`;
   const receiptResult = jobStatus?.receipt ?? null;
   const receiptConfidenceLabel =
     typeof receiptResult?.confidence === "number" && Number.isFinite(receiptResult.confidence)
