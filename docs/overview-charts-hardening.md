@@ -11,15 +11,21 @@ This guide tracks the remaining work to make the overview charts resilient acros
 
 ## 2. API Layer & Caching
 
-- [ ] Move `fetchOverviewCharts` into a dedicated revalidated cache (e.g., Next.js Route Handler with `revalidate` or Supabase Edge Function) to avoid recomputing for each request.
-- [ ] Honour `force-refresh` query flag to bypass cache during manual revalidation.
-- [ ] Memoize by `(userId, period)` key to keep user data isolated but reusable across tabs/devices.
+- [x] Move `fetchOverviewCharts` into a dedicated revalidated cache (e.g., Next.js Route Handler with `revalidate` or Supabase Edge Function) to avoid recomputing for each request.
+- [x] Honour `force-refresh` query flag to bypass cache during manual revalidation.
+- [x] Memoize by `(userId, period)` key to keep user data isolated but reusable across tabs/devices.
 
 ## 3. Configuration & Environment Safety
 
-- [ ] Promote a single source for the public app origin (e.g., `NEXT_PUBLIC_APP_URL`) and fall back only when absent.
-- [ ] Document env requirements for local vs. deployed (headers available, protocol expectations).
-- [ ] Add runtime guard that throws a descriptive error if the API route cannot be contacted (instead of silent fallback).
+- [x] Promote a single source for the public app origin (e.g., `NEXT_PUBLIC_APP_URL`) and fall back only when absent.
+- [x] Document env requirements for local vs. deployed (headers available, protocol expectations).
+- [x] Add runtime guard that throws a descriptive error if the API route cannot be contacted (instead of silent fallback).
+
+> Deployment origins
+>
+> - Local development: `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+> - Staging/preview: `NEXT_PUBLIC_APP_URL=https://budget-app-five-coral.vercel.app`
+> - Production: domain pending (fall back to forwarded host headers until configured)
 
 ## 4. Client Resilience
 
