@@ -371,7 +371,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             ) : null}
           </div>
         </header>
-        <main className="flex flex-1 flex-col bg-muted/30">
+        <main className="flex flex-1 flex-col overflow-x-hidden bg-muted/30">
           <div
             className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pt-6 pb-[var(--app-mobile-content-padding)] sm:px-6 lg:mx-0 lg:max-w-none lg:px-8 lg:pb-12 xl:mx-auto xl:max-w-7xl xl:px-10 2xl:max-w-[88rem] 2xl:px-12"
           >
