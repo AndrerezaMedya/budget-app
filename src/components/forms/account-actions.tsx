@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useRef, useState } from "react";
 
 import {
+  deleteAccountAction,
   toggleAccountArchiveAction,
   updateAccountAction,
 } from "@/actions/accounts";
@@ -26,12 +27,15 @@ export function AccountActions({ account }: AccountActionsProps) {
     toggleAccountArchiveAction,
     initialActionState,
   );
+  const [deleteState, deleteAction] = useActionState(deleteAccountAction, initialActionState);
   const { toast } = useToast();
   const editStatusRef = useRef(editState.status);
   const archiveStatusRef = useRef(archiveState.status);
+  const deleteStatusRef = useRef(deleteState.status);
   const pendingArchiveMode = useRef<"archive" | "restore">(
     account.archived_at ? "restore" : "archive",
   );
+  const deleteConfirmInputRef = useRef<HTMLInputElement>(null);
   const { t } = useI18n();
 
   useEffect(() => {
@@ -84,6 +88,29 @@ export function AccountActions({ account }: AccountActionsProps) {
       });
     }
   }, [archiveState.status, archiveState.message, toast, account.archived_at, t]);
+
+  useEffect(() => {
+    if (deleteState.status === deleteStatusRef.current) {
+      return;
+    }
+    deleteStatusRef.current = deleteState.status;
+
+    if (deleteState.status === "success") {
+      toast({
+        title: t("accounts.toast.delete.success.title"),
+        description: deleteState.message,
+        variant: "success",
+      });
+    }
+
+    if (deleteState.status === "error") {
+      toast({
+        title: t("accounts.toast.delete.error.title"),
+        description: deleteState.message,
+        variant: "error",
+      });
+    }
+  }, [deleteState.status, deleteState.message, toast, t]);
 
   return (
     <div className="space-y-3">
@@ -156,6 +183,29 @@ export function AccountActions({ account }: AccountActionsProps) {
               {account.archived_at
                 ? t("accounts.actions.restore")
                 : t("accounts.actions.archive")}
+            </Button>
+          </form>
+          <form
+            action={deleteAction}
+            onSubmit={(event) => {
+              const confirmed = window.confirm(
+                t("accounts.actions.deleteConfirm", { name: account.name }),
+              );
+
+              if (!confirmed) {
+                event.preventDefault();
+                return;
+              }
+
+              if (deleteConfirmInputRef.current) {
+                deleteConfirmInputRef.current.value = "yes";
+              }
+            }}
+          >
+            <input type="hidden" name="accountId" value={account.id} />
+            <input ref={deleteConfirmInputRef} type="hidden" name="confirm" value="no" />
+            <Button type="submit" variant="destructive" size="sm">
+              {t("accounts.actions.delete")}
             </Button>
           </form>
         </div>

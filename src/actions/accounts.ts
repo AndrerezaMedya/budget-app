@@ -156,3 +156,44 @@ export async function toggleAccountArchiveAction(
   const message = mode === "archive" ? "Account archived." : "Account restored.";
   return { status: "success", message };
 }
+
+export async function deleteAccountAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const supabase = await createSupabaseRouteHandlerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "error", message: "You must be signed in." };
+  }
+
+  const accountId = (formData.get("accountId") as string | null)?.trim();
+  const confirm = (formData.get("confirm") as string | null)?.trim();
+
+  if (!accountId) {
+    return { status: "error", message: "Missing account identifier." };
+  }
+
+  if (confirm !== "yes") {
+    return { status: "error", message: "Deletion request was not confirmed." };
+  }
+
+  const { error } = await supabase
+    .from("accounts")
+    .delete()
+    .eq("id", accountId)
+    .eq("user_id", user.id);
+
+  if (error) {
+    return { status: "error", message: error.message };
+  }
+
+  revalidatePath("/app/accounts");
+  revalidatePath("/app/overview");
+  revalidatePath("/app/settings");
+
+  return { status: "success", message: "Account deleted." };
+}
