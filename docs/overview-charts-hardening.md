@@ -29,9 +29,11 @@ This guide tracks the remaining work to make the overview charts resilient acros
 
 ## 4. Client Resilience
 
-- [ ] Surface UI warnings when charts fallback to direct Supabase calls, so the user knows data may be stale.
-- [ ] Allow manual retry from the UI when the API route responds with non-200 status.
-- [ ] Capture and log the failing period/user metadata for observability.
+- [x] Surface UI warnings when charts fallback to direct Supabase calls, so the user knows data may be stale.
+- [x] Allow manual retry from the UI when the API route responds with non-200 status.
+- [x] Capture and log the failing period/user metadata for observability.
+
+> When the API fallback is triggered, the overview page now renders a localized warning banner with a retry control that re-hits `/api/overview/charts?force-refresh=1` and refreshes the view after success. The banner reveals the last API error and all API route failures log the requesting user, period, and retry intent.
 
 ## 5. Performance & Limits
 

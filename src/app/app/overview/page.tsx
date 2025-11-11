@@ -14,6 +14,7 @@ import { formatPeriodLabel } from "@/lib/period";
 import {
   CategorySpendDonut,
   MetricCard,
+  OverviewChartsWarning,
   SpendingTrendChart,
   type MetricTrend,
 } from "@/components/dashboard";
@@ -111,12 +112,20 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
 
   const snapshot = await fetchOverviewSnapshot(resolvedSearchParams?.period);
   let charts: OverviewCharts;
+  let chartsSource: "api" | "fallback" = "api";
+  let apiErrorDetail: string | null = null;
   try {
     charts = await loadOverviewChartsFromApi(resolvedSearchParams?.period);
   } catch (error) {
+    chartsSource = "fallback";
+    apiErrorDetail = error instanceof Error ? error.message : null;
     console.warn(
       "Overview charts API unavailable, falling back to Supabase query",
-      error,
+      {
+        requestedPeriod: resolvedSearchParams?.period ?? null,
+        effectivePeriod: snapshot.period,
+        error,
+      },
     );
     charts = await fetchOverviewChartsFallback(resolvedSearchParams?.period);
   }
@@ -234,6 +243,19 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
     amount: formatCurrency(totalExpenseMinor),
   });
 
+  const fallbackWarning = chartsSource === "fallback";
+  const fallbackError = apiErrorDetail ?? t("overview.charts.warning.unknownError");
+  const fallbackMessages = fallbackWarning
+    ? {
+        title: t("overview.charts.warning.title"),
+        description: t("overview.charts.warning.description"),
+        lastErrorLabel: t("overview.charts.warning.lastError", { error: fallbackError }),
+        retryLabel: t("overview.charts.warning.retry"),
+        retryingLabel: t("overview.charts.warning.retrying"),
+        retryFailedTemplate: t("overview.charts.warning.retryFailed", { error: "{{error}}" }),
+      }
+    : null;
+
   return (
     <div className="space-y-8">
       <header className="space-y-2">
@@ -248,6 +270,14 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
           <span className="ml-1 text-muted-foreground">{periodLabel}</span>
         </p>
       </header>
+
+      {fallbackWarning && fallbackMessages ? (
+        <OverviewChartsWarning
+          period={snapshot.period}
+          errorMessage={fallbackError}
+          messages={fallbackMessages}
+        />
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {metrics.map((metric) => (

@@ -72,7 +72,12 @@ export async function GET(request: NextRequest) {
     );
     return NextResponse.json({ data: charts });
   } catch (error) {
-    console.error("Failed to load overview charts", error);
+    console.error("Failed to load overview charts", {
+      userId: user.id,
+      period: periodParam ?? null,
+      forceRefresh,
+      error,
+    });
     return NextResponse.json({ error: "Failed to load overview charts" }, { status: 500 });
   }
 }
