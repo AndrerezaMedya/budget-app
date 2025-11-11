@@ -54,7 +54,7 @@ export default async function ReportsPage({
   const reportsSubheading = t("reports.subheading");
 
   return (
-    <div className="space-y-6">
+    <div className="flex min-h-full flex-col gap-6 pb-[var(--app-mobile-content-padding)] md:pb-12">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">{t("reports.heading")}</h1>
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
@@ -109,43 +109,45 @@ export default async function ReportsPage({
             ) : null}
             {hasSummaries ? (
               <div className="overflow-hidden rounded-lg border border-border">
-                <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left">{t("reports.table.header.category")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.budget")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.spent")}</th>
-                      <th className="px-4 py-3 text-right">{t("reports.table.header.variance")}</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border bg-card">
-                    {summaries.map((summary) => (
-                      <tr key={summary.categoryId}>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {summary.categoryName}
-                        </td>
-                        <td className="px-4 py-3 text-right text-muted-foreground">
-                          {summary.budgetMinor
-                            ? formatCurrency(summary.budgetMinor)
-                            : "—"}
-                        </td>
-                        <td className="px-4 py-3 text-right text-destructive">
-                          {formatCurrency(summary.expenseMinor)}
-                        </td>
-                        <td
-                          className={`px-4 py-3 text-right ${summary.availableMinor > 0
-                              ? "text-emerald-600"
-                              : summary.availableMinor < 0
-                                ? "text-destructive"
-                                : "text-muted-foreground"
-                            }`}
-                        >
-                          {formatCurrency(summary.availableMinor)}
-                        </td>
+                <div className="max-w-full overflow-x-auto">
+                  <table className="min-w-full divide-y divide-border text-sm">
+                    <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
+                      <tr>
+                        <th className="px-4 py-3 text-left">{t("reports.table.header.category")}</th>
+                        <th className="px-4 py-3 text-right">{t("reports.table.header.budget")}</th>
+                        <th className="px-4 py-3 text-right">{t("reports.table.header.spent")}</th>
+                        <th className="px-4 py-3 text-right">{t("reports.table.header.variance")}</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody className="divide-y divide-border bg-card">
+                      {summaries.map((summary) => (
+                        <tr key={summary.categoryId}>
+                          <td className="px-4 py-3 text-muted-foreground">
+                            {summary.categoryName}
+                          </td>
+                          <td className="px-4 py-3 text-right text-muted-foreground">
+                            {summary.budgetMinor
+                              ? formatCurrency(summary.budgetMinor)
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-destructive">
+                            {formatCurrency(summary.expenseMinor)}
+                          </td>
+                          <td
+                            className={`px-4 py-3 text-right ${summary.availableMinor > 0
+                                ? "text-emerald-600"
+                                : summary.availableMinor < 0
+                                  ? "text-destructive"
+                                  : "text-muted-foreground"
+                              }`}
+                          >
+                            {formatCurrency(summary.availableMinor)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border p-6 text-sm text-muted-foreground">
