@@ -297,19 +297,19 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
                   {decoratedAccountOptions
                     .filter((account) => account.id !== transferToId)
                     .map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.label}
-                    </option>
+                      <option key={account.id} value={account.id}>
+                        {account.label}
+                      </option>
                     ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
                   {transferFromAccount
                     ? t("transactions.transfer.fromBalance", {
-                        balance: formatCurrency(
-                          transferFromAccount.currentBalanceMinor,
-                          transferFromAccount.currency ?? DEFAULT_CURRENCY,
-                        ),
-                      })
+                      balance: formatCurrency(
+                        transferFromAccount.currentBalanceMinor,
+                        transferFromAccount.currency ?? DEFAULT_CURRENCY,
+                      ),
+                    })
                     : t("transactions.transfer.balance.placeholder")}
                 </p>
               </div>
@@ -336,19 +336,19 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
                   {decoratedAccountOptions
                     .filter((account) => account.id !== transferFromId)
                     .map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.label}
-                    </option>
+                      <option key={account.id} value={account.id}>
+                        {account.label}
+                      </option>
                     ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
                   {transferToAccount
                     ? t("transactions.transfer.toBalance", {
-                        balance: formatCurrency(
-                          transferToAccount.currentBalanceMinor,
-                          transferToAccount.currency ?? DEFAULT_CURRENCY,
-                        ),
-                      })
+                      balance: formatCurrency(
+                        transferToAccount.currentBalanceMinor,
+                        transferToAccount.currency ?? DEFAULT_CURRENCY,
+                      ),
+                    })
                     : t("transactions.transfer.balance.placeholder")}
                 </p>
               </div>
@@ -376,11 +376,11 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
               <p className="text-xs text-muted-foreground">
                 {selectedAccount
                   ? t("transactions.account.balance", {
-                      balance: formatCurrency(
-                        selectedAccount.currentBalanceMinor,
-                        selectedAccount.currency ?? DEFAULT_CURRENCY,
-                      ),
-                    })
+                    balance: formatCurrency(
+                      selectedAccount.currentBalanceMinor,
+                      selectedAccount.currency ?? DEFAULT_CURRENCY,
+                    ),
+                  })
                   : t("transactions.account.balance.placeholder")}
               </p>
             </div>
