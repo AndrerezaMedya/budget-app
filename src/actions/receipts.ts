@@ -341,3 +341,71 @@ export async function finalizeReceiptTransactionsAction(
     message: "Receipt transactions saved.",
   };
 }
+
+export async function discardReceiptAction(
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const supabase = await createSupabaseRouteHandlerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    return { status: "error", message: "You must be signed in." };
+  }
+
+  const receiptId = (formData.get("receiptId") as string | null)?.trim();
+
+  if (!receiptId) {
+    return { status: "error", message: "Missing receipt identifier." };
+  }
+
+  const { data: receiptRow, error: receiptError } = await supabase
+    .from("receipts")
+    .select("id, job_id")
+    .eq("id", receiptId)
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (receiptError) {
+    return { status: "error", message: receiptError.message };
+  }
+
+  if (!receiptRow) {
+    return { status: "error", message: "Receipt not found." };
+  }
+
+  const noteToken = `receipt:${receiptId}`;
+  await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", user.id)
+    .ilike("notes", `%${noteToken}%`);
+
+  const { error: deleteReceiptError } = await supabase
+    .from("receipts")
+    .delete()
+    .eq("id", receiptId)
+    .eq("user_id", user.id);
+
+  if (deleteReceiptError) {
+    return { status: "error", message: deleteReceiptError.message };
+  }
+
+  if (receiptRow.job_id) {
+    await supabase
+      .from("receipt_ingestion_jobs")
+      .delete()
+      .eq("id", receiptRow.job_id)
+      .eq("user_id", user.id);
+  }
+
+  revalidatePath("/app/receipts");
+  revalidatePath("/app/transactions");
+
+  return {
+    status: "success",
+    message: "Receipt removed. You can scan again.",
+  };
+}
