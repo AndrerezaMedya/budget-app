@@ -89,7 +89,10 @@ export async function createTransactionAction(
 
   const type = formData.get("type") as Database["public"]["Enums"]["transaction_type"] | null;
   const amountInput = formData.get("amount");
-  const occurredAt = parseDate(formData.get("occurredAt"));
+  const timezoneOffset = parseTimezoneOffset(formData.get("timezoneOffset"));
+  const occurredAt = parseDate(formData.get("occurredAt"), {
+    timezoneOffsetMinutes: timezoneOffset,
+  });
   const description = (formData.get("description") as string | null)?.trim() ?? null;
   const tagField = (formData.get("tagIds") as string | null)?.trim() ?? "";
   const incomingTagValues = tagField
@@ -143,7 +146,7 @@ export async function createTransactionAction(
       return { status: "error", message: "Transfers between different currencies are not supported yet." };
     }
 
-    const amountMinor = parseAmountToMinor(amountInput, fromCurrency);
+  const amountMinor = parseAmountToMinor(amountInput, fromCurrency);
     if (amountMinor === null) {
       return { status: "error", message: "Enter a positive amount." };
     }
@@ -321,7 +324,10 @@ export async function updateTransactionAction(
   }
 
   const description = (formData.get("description") as string | null)?.trim() ?? null;
-  const occurredAt = parseDate(formData.get("occurredAt"));
+  const timezoneOffset = parseTimezoneOffset(formData.get("timezoneOffset"));
+  const occurredAt = parseDate(formData.get("occurredAt"), {
+    timezoneOffsetMinutes: timezoneOffset,
+  });
 
   if (!occurredAt) {
     return { status: "error", message: "Provide a valid date." };
