@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { DEFAULT_CURRENCY } from "@/config/currencies";
 import { formatCurrency, formatDate } from "@/lib/format";
 import type { TranslationKey } from "@/i18n/translations";
@@ -164,8 +166,10 @@ export default async function ReceiptsPage() {
                             {formatReceiptConfidence(receipt.confidence)}
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <Button size="sm" variant="outline" disabled>
-                              {t("transactions.receipts.action.add")}
+                            <Button size="sm" variant="outline" asChild>
+                              <Link href={`/app/receipts/review/${receipt.id}`}>
+                                {t("transactions.receipts.action.add")}
+                              </Link>
                             </Button>
                           </td>
                         </tr>
@@ -210,8 +214,10 @@ export default async function ReceiptsPage() {
                         </Badge>
                       ) : null}
                       <div className="pt-2">
-                        <Button size="sm" variant="outline" disabled className="w-full">
-                          {t("transactions.receipts.action.add")}
+                        <Button size="sm" variant="outline" asChild className="w-full">
+                          <Link href={`/app/receipts/review/${receipt.id}`}>
+                            {t("transactions.receipts.action.add")}
+                          </Link>
                         </Button>
                       </div>
                     </div>
