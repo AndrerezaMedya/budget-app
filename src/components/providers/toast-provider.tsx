@@ -81,14 +81,14 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4 sm:inset-auto sm:right-4 sm:top-4 sm:bottom-auto sm:flex-col sm:items-end sm:gap-2 sm:px-0">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(var(--app-mobile-nav-offset,_72px)+1rem)] z-[80] flex justify-center px-4 sm:inset-auto sm:right-4 sm:top-4 sm:bottom-auto sm:flex-col sm:items-end sm:gap-2 sm:px-0">
         {toasts.map((toastRecord) => {
           const variantClasses =
             toastRecord.variant === "success"
               ? "border-emerald-300 bg-emerald-50 text-emerald-900"
               : toastRecord.variant === "error"
-              ? "border-red-300 bg-red-50 text-red-900"
-              : "border-border bg-card text-foreground";
+                ? "border-red-300 bg-red-50 text-red-900"
+                : "border-border bg-card text-foreground";
 
           return (
             <div
