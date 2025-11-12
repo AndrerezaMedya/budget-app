@@ -19,13 +19,57 @@ const SUPPORTED_TYPES: Array<Database["public"]["Enums"]["transaction_type"]> = 
 
 type AccountCurrencyRow = Pick<Database["public"]["Tables"]["accounts"]["Row"], "id" | "currency">;
 
-function parseDate(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string" || value.trim() === "") return null;
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
+type ParseDateOptions = {
+  timezoneOffsetMinutes?: number | null;
+};
+
+function parseTimezoneOffset(value: FormDataEntryValue | null): number | null {
+  if (typeof value !== "string") {
     return null;
   }
-  return parsed.toISOString();
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  const parsed = Number.parseInt(trimmed, 10);
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+  return parsed;
+}
+
+function parseDate(value: FormDataEntryValue | null, options: ParseDateOptions = {}): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  const { timezoneOffsetMinutes } = options;
+  const hasExplicitZone = /[zZ]|[+-]\d{2}:\d{2}$/.test(trimmed);
+
+  if (!hasExplicitZone && typeof timezoneOffsetMinutes === "number" && Number.isFinite(timezoneOffsetMinutes)) {
+    const needsSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed);
+    const base = needsSeconds ? `${trimmed}:00` : trimmed;
+    const absoluteOffset = Math.abs(timezoneOffsetMinutes);
+    const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, "0");
+    const offsetMinutes = String(absoluteOffset % 60).padStart(2, "0");
+    const sign = timezoneOffsetMinutes <= 0 ? "+" : "-";
+    const withOffset = `${base}${sign}${offsetHours}:${offsetMinutes}`;
+    const coerced = new Date(withOffset);
+    if (!Number.isNaN(coerced.getTime())) {
+      return coerced.toISOString();
+    }
+  }
+
+  const fallback = new Date(trimmed);
+  if (Number.isNaN(fallback.getTime())) {
+    return null;
+  }
+  return fallback.toISOString();
 }
 
 export async function createTransactionAction(
