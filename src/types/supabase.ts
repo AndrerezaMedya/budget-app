@@ -288,6 +288,7 @@ export type Database = {
       };
       receipt_line_items: {
         Row: {
+          description: string;
           category: string | null;
           id: string;
           line_total_minor: number;
@@ -296,6 +297,7 @@ export type Database = {
           unit_price_minor: number | null;
         };
         Insert: {
+          description: string;
           category?: string | null;
           id?: string;
           line_total_minor: number;
@@ -304,6 +306,7 @@ export type Database = {
           unit_price_minor?: number | null;
         };
         Update: {
+          description?: string;
           category?: string | null;
           id?: string;
           line_total_minor?: number;
