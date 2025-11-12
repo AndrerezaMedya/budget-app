@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { DEFAULT_CURRENCY, getCurrencyDecimals } from "@/config/currencies";
-import { resolvePredefinedCategoryId } from "@/lib/categories/predefined";
 import { preprocessReceiptImage } from "@/lib/receipts/preprocess";
 import { generatePerceptualHash } from "@/lib/receipts/dedupe";
 import { performReceiptOcr } from "@/lib/receipts/ocr";
@@ -69,8 +68,8 @@ const PROGRESS_DESCRIPTORS: Record<Exclude<ProgressStage, "failed">, {
     range: [75, 85],
   },
   persisting: {
-    label: "Menyimpan ke akun",
-    description: "Menyimpan struk dan transaksi ke akun kamu.",
+    label: "Menyimpan untuk ditinjau",
+    description: "Menyiapkan data struk agar bisa kamu tinjau sebelum disimpan.",
     range: [85, 95],
   },
   done: {
@@ -86,7 +85,7 @@ const ERROR_COPY_BY_STAGE: Record<Exclude<ProgressStage, "done">, string> = {
   ocr: "Teks sulit terbaca. Coba foto lebih dekat atau rata.",
   interpreting: "Data belanja sulit disusun. Coba unggah ulang struk.",
   validating: "Total tidak konsisten. Periksa kembali total di struk.",
-  persisting: "Tidak bisa menyimpan ke akun. Coba lagi sebentar.",
+  persisting: "Tidak bisa menyimpan struk. Coba lagi sebentar.",
   failed: "Terjadi kesalahan saat memproses struk.",
 };
 
@@ -176,20 +175,6 @@ function detectExtension(contentType: string | null, fallbackName: string | unde
     default:
       return "jpg";
   }
-}
-
-function formatQuantityDisplay(rawQuantity: string): string {
-  const trimmed = rawQuantity.trim();
-  if (!trimmed) {
-    return "1";
-  }
-
-  const numeric = Number.parseFloat(trimmed);
-  if (Number.isFinite(numeric)) {
-    return Number.isInteger(numeric) ? numeric.toString() : numeric.toString();
-  }
-
-  return trimmed;
 }
 
 function toMinorUnits(value: number | null | undefined, currency: string): number | null {
@@ -564,71 +549,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      const occurredAtIso = normalizedReceipt.purchaseAt ?? new Date().toISOString();
-      let categoriesCreated = false;
-      const transactionRows = [] as Array<{
-        user_id: string;
-        account_id: string;
-        type: "expense";
-        amount_minor: number;
-        currency: string;
-        occurred_at: string;
-        booked_at: string;
-        description: string;
-        notes: string;
-        category_id: string | null;
-      }>;
-
-      for (const item of normalizedReceipt.lineItems) {
-        if (typeof item.lineTotalMinor !== "number" || item.lineTotalMinor <= 0) {
-          continue;
-        }
-
-        let categoryId: string | null = null;
-        if (item.category) {
-          const [categorySlug, subcategorySlug] = item.category.split("/");
-          try {
-            const result = await resolvePredefinedCategoryId({
-              supabase,
-              userId: user.id,
-              categoryType: "expense",
-              categorySlug: categorySlug ?? null,
-              subcategorySlug: subcategorySlug ?? null,
-            });
-            categoryId = result.categoryId;
-            categoriesCreated ||= result.created;
-          } catch (error) {
-            console.warn("Failed to resolve category for receipt line item", {
-              itemCategory: item.category,
-              error,
-            });
-          }
-        }
-
-        const quantityLabel = formatQuantityDisplay(item.quantity);
-        const description = `${quantityLabel} × ${item.description}`.trim();
-
-        transactionRows.push({
-          user_id: user.id,
-          account_id: accountId,
-          type: "expense",
-          amount_minor: item.lineTotalMinor,
-          currency: normalizedReceipt.currency,
-          occurred_at: occurredAtIso,
-          booked_at: occurredAtIso,
-          description,
-          notes: `Diimport dari struk ${normalizedReceipt.merchant.name} (${insertedReceipt.id.slice(0, 8)})`,
-          category_id: categoryId,
-        });
-      }
-
-      if (transactionRows.length > 0) {
-        const { error: transactionError } = await supabase.from("transactions").insert(transactionRows);
-        if (transactionError) {
-          throw new Error(transactionError.message);
-        }
-      }
-
       await updateReceiptJob(receiptJob.id, {
         status: "succeeded",
         completed_at: new Date().toISOString(),
@@ -638,13 +558,7 @@ export async function POST(request: NextRequest) {
         progress_message: PROGRESS_DESCRIPTORS.done.description,
       });
 
-      revalidatePath("/app/transactions");
-      revalidatePath("/app/overview");
-      revalidatePath("/app/accounts");
-      if (categoriesCreated) {
-        revalidatePath("/app/settings");
-      }
-      revalidatePath("/app/budgets");
+      revalidatePath("/app/receipts");
 
       return NextResponse.json(
         {

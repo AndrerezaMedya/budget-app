@@ -84,6 +84,14 @@ export async function GET(
       purchaseAt: string | null;
       confidence: number | null;
       warnings: string[];
+      lineItems: Array<{
+        id: string;
+        description: string;
+        quantity: string;
+        unitPriceMinor: number | null;
+        lineTotalMinor: number;
+        category: string | null;
+      }>;
     } | null;
   } = {
     job: {
@@ -118,6 +126,15 @@ export async function GET(
     }
 
     if (receipt) {
+      const { data: lineItems, error: lineItemsError } = await supabase
+        .from("receipt_line_items")
+        .select("id, description, category, quantity, unit_price_minor, line_total_minor")
+        .eq("receipt_id", receipt.id);
+
+      if (lineItemsError) {
+        return NextResponse.json({ error: lineItemsError.message }, { status: 400 });
+      }
+
       const confidenceValue =
         typeof receipt.confidence === "number"
           ? receipt.confidence
@@ -139,6 +156,14 @@ export async function GET(
         purchaseAt: receipt.purchase_at,
         confidence: Number.isFinite(confidenceValue) ? Number(confidenceValue) : null,
         warnings: coerceWarnings(receipt.model_response),
+        lineItems: (lineItems ?? []).map((item) => ({
+          id: item.id,
+          description: item.description,
+          quantity: typeof item.quantity === "string" ? item.quantity : String(item.quantity ?? "1"),
+          unitPriceMinor: item.unit_price_minor ?? null,
+          lineTotalMinor: item.line_total_minor ?? 0,
+          category: item.category ?? null,
+        })),
       };
     }
   }
