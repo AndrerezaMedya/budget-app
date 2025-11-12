@@ -491,6 +491,24 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
             </p>
           </div>
 
+          {transactionType === "transfer" ? (
+            <div className="space-y-2">
+              <Label htmlFor="transaction-admin-fee">{t("transactions.field.adminFee")}</Label>
+              <Input
+                id="transaction-admin-fee"
+                name="adminFee"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min={0}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                {t("transactions.field.adminFee.help")}
+              </p>
+            </div>
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="transaction-occurred">{t("transactions.field.occurredAt")}</Label>
             <Input

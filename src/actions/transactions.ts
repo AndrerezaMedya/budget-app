@@ -104,6 +104,14 @@ export async function createTransactionAction(
       return { status: "error", message: "Enter a positive amount." };
     }
 
+    const adminFeeMinor = parseAmountToMinor(formData.get("adminFee"), fromCurrency, { allowZero: true });
+    if (adminFeeMinor === null) {
+      return { status: "error", message: "Enter a valid admin fee." };
+    }
+
+    const transferMetadata = JSON.stringify({ transferAmountMinor: amountMinor, adminFeeMinor });
+    const outgoingAmountMinor = amountMinor + adminFeeMinor;
+
     const transferGroupId = randomUUID();
     const rows: Database["public"]["Tables"]["transactions"]["Insert"][] = [
       {
@@ -112,11 +120,12 @@ export async function createTransactionAction(
         type,
         transfer_direction: "out",
         transfer_group_id: transferGroupId,
-        amount_minor: amountMinor,
+        amount_minor: outgoingAmountMinor,
         currency: fromCurrency,
         occurred_at: occurredAt,
         booked_at: occurredAt,
         description,
+        notes: transferMetadata,
       },
       {
         user_id: user.id,
@@ -129,6 +138,7 @@ export async function createTransactionAction(
         occurred_at: occurredAt,
         booked_at: occurredAt,
         description,
+        notes: transferMetadata,
       },
     ];
 

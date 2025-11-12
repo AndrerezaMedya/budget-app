@@ -39,6 +39,7 @@ export type HydratedTransaction = {
   subcategorySlug: string | null;
   transferDirection: TransactionRow["transfer_direction"];
   transferGroupId: string | null;
+  notes: string | null;
   createdAt: string;
 };
 
@@ -174,7 +175,7 @@ export async function fetchRecentTransactions(
   let query = supabase
     .from("transactions")
     .select(
-      `id, account_id, description, occurred_at, amount_minor, currency, type, transfer_direction, transfer_group_id, created_at,
+      `id, account_id, description, notes, occurred_at, amount_minor, currency, type, transfer_direction, transfer_group_id, created_at,
         account:accounts!transactions_account_id_fkey ( id, name ),
         category:categories!transactions_category_id_fkey ( id, name, parent_id )`
     )
@@ -234,6 +235,7 @@ export async function fetchRecentTransactions(
       subcategorySlug,
       transferDirection: row.transfer_direction,
       transferGroupId: row.transfer_group_id,
+      notes: row.notes,
       createdAt: row.created_at,
     } satisfies HydratedTransaction;
   });

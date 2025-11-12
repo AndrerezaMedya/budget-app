@@ -232,30 +232,114 @@ function deriveSignedAmount(
   return amountMinor;
 }
 
-function collapseTransferPairs(transactions: HydratedTransaction[]) {
-  const preferredByGroup = new Map<string, HydratedTransaction>();
+type DisplayTransaction = HydratedTransaction & {
+  transferSummary?: {
+    fromAccount: HydratedTransaction["account"] | null;
+    toAccount: HydratedTransaction["account"] | null;
+    amountMinor: number | null;
+    adminFeeMinor: number | null;
+  };
+};
+
+type TransferMetadata = {
+  transferAmountMinor?: unknown;
+  adminFeeMinor?: unknown;
+};
+
+function parseTransferMetadata(notes: string | null) {
+  if (!notes) {
+    return null;
+  }
+  const trimmed = notes.trim();
+  if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as TransferMetadata;
+    const transferAmountMinor =
+      typeof parsed.transferAmountMinor === "number" && Number.isFinite(parsed.transferAmountMinor)
+        ? parsed.transferAmountMinor
+        : null;
+    const adminFeeMinor =
+      typeof parsed.adminFeeMinor === "number" && Number.isFinite(parsed.adminFeeMinor)
+        ? Math.max(parsed.adminFeeMinor, 0)
+        : null;
+    return { transferAmountMinor, adminFeeMinor };
+  } catch {
+    return null;
+  }
+}
+
+function collapseTransferPairs(transactions: HydratedTransaction[], options: { collapse?: boolean } = {}) {
+  const shouldCollapse = options.collapse ?? true;
+  const transferGroups = new Map<string, HydratedTransaction[]>();
 
   for (const transaction of transactions) {
-    if (transaction.type !== "transfer" || !transaction.transferGroupId) {
-      continue;
-    }
-
-    const current = preferredByGroup.get(transaction.transferGroupId);
-    if (!current) {
-      preferredByGroup.set(transaction.transferGroupId, transaction);
-      continue;
-    }
-
-    const prefersOutgoing = current.transferDirection !== "out" && transaction.transferDirection === "out";
-    const prefersDefinedDirection = !current.transferDirection && Boolean(transaction.transferDirection);
-
-    if (prefersOutgoing || prefersDefinedDirection) {
-      preferredByGroup.set(transaction.transferGroupId, transaction);
+    if (transaction.type === "transfer" && transaction.transferGroupId) {
+      const entry = transferGroups.get(transaction.transferGroupId);
+      if (entry) {
+        entry.push(transaction);
+      } else {
+        transferGroups.set(transaction.transferGroupId, [transaction]);
+      }
     }
   }
 
-  const seenGroups = new Set<string>();
-  const collapsed: HydratedTransaction[] = [];
+  const buildSummary = (groupId: string | null | undefined, fallback: HydratedTransaction) => {
+    const group = groupId ? transferGroups.get(groupId) ?? [] : [];
+    const outgoing = group.find((item) => item.transferDirection === "out")
+      ?? (fallback.transferDirection === "out" ? fallback : undefined);
+    const incoming = group.find((item) => item.transferDirection === "in")
+      ?? (fallback.transferDirection === "in" ? fallback : undefined);
+
+    const metadataSource = outgoing?.notes ?? incoming?.notes ?? fallback.notes ?? null;
+    const metadata = parseTransferMetadata(metadataSource);
+
+    const transferAmountMinor =
+      metadata?.transferAmountMinor ?? incoming?.amountMinor ?? outgoing?.amountMinor ?? fallback.amountMinor;
+
+    let resolvedAdminFeeMinor = metadata?.adminFeeMinor;
+    if (resolvedAdminFeeMinor === null || resolvedAdminFeeMinor === undefined) {
+      if (outgoing && incoming) {
+        const delta = outgoing.amountMinor - incoming.amountMinor;
+        resolvedAdminFeeMinor = delta > 0 ? delta : 0;
+      } else {
+        resolvedAdminFeeMinor = 0;
+      }
+    }
+
+    if (typeof resolvedAdminFeeMinor === "number" && resolvedAdminFeeMinor <= 0) {
+      resolvedAdminFeeMinor = 0;
+    }
+
+    const summary: DisplayTransaction["transferSummary"] = {
+      fromAccount: outgoing?.account ?? null,
+      toAccount: incoming?.account ?? null,
+      amountMinor: transferAmountMinor ?? null,
+      adminFeeMinor: resolvedAdminFeeMinor && resolvedAdminFeeMinor > 0 ? resolvedAdminFeeMinor : null,
+    };
+
+    const primaryDirection = outgoing ? "out" : incoming ? "in" : fallback.transferDirection;
+
+    return { summary, primaryDirection };
+  };
+
+  if (!shouldCollapse) {
+    return transactions.map((transaction) => {
+      if (transaction.type !== "transfer" || !transaction.transferGroupId) {
+        return transaction;
+      }
+      const { summary } = buildSummary(transaction.transferGroupId, transaction);
+      return {
+        ...transaction,
+        transferSummary: summary,
+      } satisfies DisplayTransaction;
+    });
+  }
+
+  const processed = new Set<string>();
+  const collapsed: DisplayTransaction[] = [];
 
   for (const transaction of transactions) {
     if (transaction.type !== "transfer" || !transaction.transferGroupId) {
@@ -264,13 +348,23 @@ function collapseTransferPairs(transactions: HydratedTransaction[]) {
     }
 
     const groupId = transaction.transferGroupId;
-    if (seenGroups.has(groupId)) {
+    if (processed.has(groupId)) {
       continue;
     }
-    seenGroups.add(groupId);
+    processed.add(groupId);
 
-    const preferred = preferredByGroup.get(groupId) ?? transaction;
-    collapsed.push(preferred);
+    const { summary, primaryDirection } = buildSummary(groupId, transaction);
+    const group = transferGroups.get(groupId);
+    const primary =
+      (primaryDirection === "out"
+        ? group?.find((item) => item.transferDirection === "out")
+        : group?.find((item) => item.transferDirection === "in")) ?? transaction;
+
+    collapsed.push({
+      ...primary,
+      transferDirection: primaryDirection,
+      transferSummary: summary,
+    });
   }
 
   return collapsed;
@@ -490,9 +584,9 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
 
   filteredTransactionsRaw.sort((a, b) => b.occurredAt.localeCompare(a.occurredAt));
 
-  const filteredTransactions = !filters.accountId
-    ? collapseTransferPairs(filteredTransactionsRaw)
-    : filteredTransactionsRaw;
+  const filteredTransactions: DisplayTransaction[] = collapseTransferPairs(filteredTransactionsRaw, {
+    collapse: !filters.accountId,
+  });
 
   const computeRollingStartDate = (days: number) => {
     const anchor = new Date(periodEnd);
@@ -1024,9 +1118,24 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                                       content = occurredOn;
                                       break;
                                     case "account":
-                                      content = transaction.account
-                                        ? `${transaction.account.name} (${(transaction.currency ?? DEFAULT_CURRENCY).toUpperCase()})`
-                                        : "—";
+                                      if (transaction.type === "transfer" && transaction.transferSummary) {
+                                        const fromName = transaction.transferSummary.fromAccount?.name
+                                          ?? t("transactions.transfer.meta.unknownAccount");
+                                        const toName = transaction.transferSummary.toAccount?.name
+                                          ?? t("transactions.transfer.meta.unknownAccount");
+                                        const routeLabel = `${fromName} → ${toName}`;
+                                        const currencyLabel = (transaction.currency ?? DEFAULT_CURRENCY).toUpperCase();
+                                        content = (
+                                          <div className="flex flex-col">
+                                            <span className="truncate">{routeLabel}</span>
+                                            <span className="text-xs text-muted-foreground">{currencyLabel}</span>
+                                          </div>
+                                        );
+                                      } else {
+                                        content = transaction.account
+                                          ? `${transaction.account.name} (${(transaction.currency ?? DEFAULT_CURRENCY).toUpperCase()})`
+                                          : "—";
+                                      }
                                       break;
                                     case "category":
                                       content = transaction.category?.name ?? "—";
@@ -1035,7 +1144,24 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                                       content = transaction.description ?? "—";
                                       break;
                                     case "amount":
-                                      content = amountDisplay;
+                                      content = (
+                                        <div className="flex flex-col items-end">
+                                          <span>{amountDisplay}</span>
+                                          {transaction.type === "transfer"
+                                            && transaction.transferSummary?.adminFeeMinor
+                                            ? (
+                                              <span className="text-xs text-muted-foreground">
+                                                {t("transactions.transfer.fee.included", {
+                                                  fee: formatCurrency(
+                                                    transaction.transferSummary.adminFeeMinor,
+                                                    transaction.currency ?? undefined,
+                                                  ),
+                                                })}
+                                              </span>
+                                            )
+                                            : null}
+                                        </div>
+                                      );
                                       break;
                                     case "actions":
                                       content = (
@@ -1133,7 +1259,30 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                           const amountDisplay = formatCurrency(signedAmount, transaction.currency ?? undefined);
                           const occurredTime = new Date(transaction.occurredAt);
                           const metadataParts: string[] = [];
-                          if (transaction.account?.name) {
+                          if (transaction.type === "transfer" && transaction.transferSummary) {
+                            if (transaction.transferSummary.fromAccount?.name) {
+                              metadataParts.push(
+                                t("transactions.transfer.meta.source", {
+                                  account: transaction.transferSummary.fromAccount.name,
+                                }),
+                              );
+                            }
+                            if (transaction.transferSummary.toAccount?.name) {
+                              metadataParts.push(
+                                t("transactions.transfer.meta.destination", {
+                                  account: transaction.transferSummary.toAccount.name,
+                                }),
+                              );
+                            }
+                            const transferAmountMinor = transaction.transferSummary.amountMinor ?? transaction.amountMinor;
+                            if (transferAmountMinor !== null && transferAmountMinor !== undefined) {
+                              metadataParts.push(
+                                t("transactions.transfer.meta.amount", {
+                                  amount: formatCurrency(transferAmountMinor, transaction.currency ?? undefined),
+                                }),
+                              );
+                            }
+                          } else if (transaction.account?.name) {
                             metadataParts.push(`${transaction.account.name} · ${currencyCode}`);
                           } else {
                             metadataParts.push(currencyCode);
@@ -1196,6 +1345,16 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                                   />
                                 </div>
                               </div>
+                              {transaction.type === "transfer" && transaction.transferSummary?.adminFeeMinor ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {t("transactions.transfer.fee.included", {
+                                    fee: formatCurrency(
+                                      transaction.transferSummary.adminFeeMinor,
+                                      transaction.currency ?? undefined,
+                                    ),
+                                  })}
+                                </p>
+                              ) : null}
                             </div>
                           );
                         })}
