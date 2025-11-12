@@ -15,7 +15,7 @@ import {
 import { useRouter } from "next/navigation";
 
 import { ACCOUNT_CURRENCY_OPTIONS, getCurrencyDecimals } from "@/config/currencies";
-import { createTransactionAction } from "@/actions/transactions";
+import { finalizeReceiptTransactionsAction } from "@/actions/receipts";
 import { initialActionState } from "@/actions/types";
 import { useToast } from "@/components/providers/toast-provider";
 import { useI18n } from "@/components/providers/i18n-provider";
@@ -24,14 +24,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 const ACCEPTED_MIME_TYPES = [
   "image/jpeg",
@@ -62,6 +54,44 @@ const PROGRESS_STAGE_ORDER: ReceiptProgressStage[] = [
   "persisting",
   "done",
 ];
+
+const OCR_LOCALE_OPTIONS = [
+  {
+    value: "id-ID",
+    label: {
+      id: "Bahasa Indonesia",
+      en: "Indonesian",
+    },
+  },
+  {
+    value: "en-US",
+    label: {
+      id: "Inggris (AS)",
+      en: "English (US)",
+    },
+  },
+  {
+    value: "en-GB",
+    label: {
+      id: "Inggris (UK)",
+      en: "English (UK)",
+    },
+  },
+  {
+    value: "en-SG",
+    label: {
+      id: "Inggris (Singapura)",
+      en: "English (Singapore)",
+    },
+  },
+  {
+    value: "ms-MY",
+    label: {
+      id: "Melayu (Malaysia)",
+      en: "Malay (Malaysia)",
+    },
+  },
+] as const;
 
 type LocalizedProgressStep = {
   id: ReceiptProgressStage;
@@ -123,8 +153,8 @@ function resolveProgressSteps(locale: string): LocalizedProgressStep[] {
       },
       {
         id: "persisting",
-        title: "Menyimpan ke akun",
-        description: "Menyimpan struk dan transaksi ke akun kamu.",
+        title: "Menyiapkan untuk ditinjau",
+        description: "Menyiapkan data struk agar bisa kamu tinjau sebelum disimpan.",
         range: [85, 95],
       },
       {
@@ -135,7 +165,6 @@ function resolveProgressSteps(locale: string): LocalizedProgressStep[] {
       },
     ];
   }
-
   return [
     {
       id: "uploading",
@@ -169,8 +198,8 @@ function resolveProgressSteps(locale: string): LocalizedProgressStep[] {
     },
     {
       id: "persisting",
-      title: "Saving to workspace",
-      description: "Storing the receipt and transaction in your workspace.",
+      title: "Preparing for review",
+      description: "Getting the receipt ready so you can review before saving.",
       range: [85, 95],
     },
     {
@@ -190,7 +219,7 @@ function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | 
       ocr: "Teks sulit terbaca. Coba foto lebih dekat atau rata.",
       interpreting: "Data belanja sulit disusun. Coba unggah ulang struk.",
       validating: "Total tidak konsisten. Periksa kembali total di struk.",
-      persisting: "Tidak bisa menyimpan ke akun. Coba lagi sebentar.",
+  persisting: "Tidak bisa menyimpan struk. Coba lagi sebentar.",
       done: "Berhasil! Struk tersimpan.",
       failed: "Terjadi kesalahan saat memproses struk.",
       unknown: "Proses struk terhenti. Coba lagi.",
@@ -203,7 +232,7 @@ function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | 
     ocr: "Text was hard to read. Try a closer, flatter photo.",
     interpreting: "Receipt data was hard to interpret. Please upload again.",
     validating: "Totals looked inconsistent. Double-check the receipt.",
-    persisting: "Unable to save to your account. Try again shortly.",
+  persisting: "Unable to store the receipt. Try again shortly.",
     done: "Success! Receipt stored.",
     failed: "An error occurred while processing the receipt.",
     unknown: "Receipt processing stopped unexpectedly. Try again.",
@@ -344,6 +373,14 @@ type JobStatusSnapshot = {
     paymentMethod: string | null;
     confidence: number | null;
     warnings: string[];
+    lineItems: Array<{
+      id: string;
+      description: string;
+      quantity: string;
+      unitPriceMinor: number | null;
+      lineTotalMinor: number;
+      category: string | null;
+    }>;
   }
   | null;
 };
@@ -371,6 +408,7 @@ type JobStatusResponse = {
 type ReceiptDraft = {
   merchantName: string;
   purchaseDate: string;
+  purchaseTime: string;
   paymentMethod: string;
   currency: string;
   total: string;
@@ -378,6 +416,16 @@ type ReceiptDraft = {
   tax: string;
   discount: string;
   notes: string;
+  lineItems: ReceiptDraftLineItem[];
+};
+
+type ReceiptDraftLineItem = {
+  id: string | null;
+  description: string;
+  quantity: string;
+  unitPrice: string;
+  lineTotal: string;
+  category: string;
 };
 
 type ProcessingMode = "enhanced" | "direct";
@@ -418,8 +466,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const dragCounterRef = useRef(0);
   const [isDragActive, setIsDragActive] = useState(false);
   const [receiptDraft, setReceiptDraft] = useState<ReceiptDraft | null>(null);
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
-  const [isCreatingTransaction, setIsCreatingTransaction] = useState(false);
+  const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [processingMode, setProcessingMode] = useState<ProcessingMode>("enhanced");
   const [displayStageIndex, setDisplayStageIndex] = useState(0);
   const stageAdvanceTimeoutRef = useRef<number | null>(null);
@@ -433,7 +480,15 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     () => (isIndonesian ? "Meminta status..." : "Requesting status..."),
     [isIndonesian],
   );
-  const [createState, createTransactionFormAction] = useActionState(createTransactionAction, initialActionState);
+  const localeOptions = useMemo(
+    () =>
+      OCR_LOCALE_OPTIONS.map((option) => ({
+        value: option.value,
+        label: isIndonesian ? option.label.id : option.label.en,
+      })),
+    [isIndonesian],
+  );
+  const [saveState, finalizeReceiptAction] = useActionState(finalizeReceiptTransactionsAction, initialActionState);
   const accountMap = useMemo(() => new Map(accounts.map((account) => [account.id, account])), [accounts]);
   const hasAccounts = accounts.length > 0;
   const openFilePicker = useCallback(() => {
@@ -485,8 +540,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       setReceiptDraft(null);
       setTransientNotice(null);
       setIsProgressVisible(false);
-      setIsCreateDialogOpen(false);
-      setIsCreatingTransaction(false);
+  setIsSavingReceipt(false);
       clearStageAdvanceTimer();
       setDisplayStageIndex(0);
     },
@@ -540,12 +594,46 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     setReceiptDraft((prev) => (prev ? { ...prev, [key]: value } : prev));
   }, []);
 
-  const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
-    setIsCreateDialogOpen(nextOpen);
-    if (!nextOpen) {
-      setIsCreatingTransaction(false);
-    }
+  const handleLineItemFieldChange = useCallback(
+    (index: number, key: keyof ReceiptDraftLineItem, value: string) => {
+      setReceiptDraft((prev) => {
+        if (!prev) {
+          return prev;
+        }
+        const nextItems = prev.lineItems.map((item, itemIndex) =>
+          itemIndex === index ? { ...item, [key]: value } : item,
+        );
+        return { ...prev, lineItems: nextItems };
+      });
+    },
+    [],
+  );
+
+  const handleAddLineItem = useCallback(() => {
+    setReceiptDraft((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      return {
+        ...prev,
+        lineItems: [
+          ...prev.lineItems,
+          { id: null, description: "", quantity: "1", unitPrice: "", lineTotal: "", category: "" },
+        ],
+      };
+    });
   }, []);
+
+  const handleRemoveLineItem = useCallback((index: number) => {
+    setReceiptDraft((prev) => {
+      if (!prev) {
+        return prev;
+      }
+      const nextItems = prev.lineItems.filter((_, itemIndex) => itemIndex !== index);
+      return { ...prev, lineItems: nextItems };
+    });
+  }, []);
+
   const handleResetAfterSuccess = useCallback(() => {
     setState({ status: "idle" });
     setJobStatus(null);
@@ -556,7 +644,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     setReceiptDraft(null);
     setStoragePreviewUrl(null);
     setPreviewUrl(null);
-    setIsCreateDialogOpen(false);
+    setIsSavingReceipt(false);
     lastProgressStageRef.current = "uploading";
     clearStageAdvanceTimer();
     setDisplayStageIndex(0);
@@ -806,14 +894,59 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const hasReceiptResult = Boolean(receiptDraft && receiptResult);
   const reviewWarnings = receiptResult?.warnings ?? [];
   const receiptCurrencyStep = resolveCurrencyStep(receiptDraft?.currency ?? currency);
-  const canCreateTransaction = Boolean(receiptDraft && receiptDraft.total && accountId);
   const previewTotalMinor = receiptDraft?.total ? toMinorFromInput(receiptDraft.total, receiptDraft.currency) : null;
   const previewSubtotalMinor = receiptDraft?.subtotal ? toMinorFromInput(receiptDraft.subtotal, receiptDraft.currency) : null;
   const previewTaxMinor = receiptDraft?.tax ? toMinorFromInput(receiptDraft.tax, receiptDraft.currency) : null;
   const previewDiscountMinor = receiptDraft?.discount ? toMinorFromInput(receiptDraft.discount, receiptDraft.currency) : null;
-  const defaultDialogAccountId = accountId || accounts[0]?.id || "";
-  const defaultOccurredAt = receiptDraft?.purchaseDate || new Date().toISOString().slice(0, 10);
-  const defaultDescription = receiptDraft?.merchantName ?? "";
+  const lineItemsTotalMinor = useMemo(() => {
+    if (!receiptDraft) {
+      return null;
+    }
+    return receiptDraft.lineItems.reduce((sum, item) => {
+      if (!item.lineTotal) {
+        return sum;
+      }
+      const minor = toMinorFromInput(item.lineTotal, receiptDraft.currency);
+      if (minor === null) {
+        return sum;
+      }
+      return sum + minor;
+    }, 0);
+  }, [receiptDraft]);
+  const serializedLineItems = useMemo(() => {
+    if (!receiptDraft) {
+      return "[]";
+    }
+    const payload = receiptDraft.lineItems.map((item) => ({
+      id: item.id,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      lineTotal: item.lineTotal,
+      category: item.category,
+    }));
+    return JSON.stringify(payload);
+  }, [receiptDraft]);
+  const hasValidLineItems = receiptDraft?.lineItems.some(
+    (item) => item.description.trim().length > 0 && item.lineTotal.trim().length > 0,
+  ) ?? false;
+  const canSaveReceipt = Boolean(
+    receiptDraft
+      && accountId
+      && receiptDraft.total.trim().length > 0
+      && hasValidLineItems,
+  );
+  const lineItemsDeltaMinor = previewTotalMinor !== null && lineItemsTotalMinor !== null ? lineItemsTotalMinor - previewTotalMinor : null;
+  const formattedLineItemsTotal = receiptDraft?.currency && lineItemsTotalMinor !== null
+    ? formatCurrency(lineItemsTotalMinor, receiptDraft.currency)
+    : null;
+  const formattedTotal = receiptDraft?.currency && previewTotalMinor !== null
+    ? formatCurrency(previewTotalMinor, receiptDraft.currency)
+    : null;
+  const lineItemsDeltaLabel = receiptDraft?.currency && lineItemsDeltaMinor !== null && lineItemsDeltaMinor !== 0
+    ? formatCurrency(Math.abs(lineItemsDeltaMinor), receiptDraft.currency)
+    : null;
+  const lineItemsDeltaIsPositive = lineItemsDeltaMinor !== null && lineItemsDeltaMinor > 0;
 
   useEffect(() => {
     if (!file) {
@@ -860,14 +993,39 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   useEffect(() => {
     if (!jobStatus?.receipt) {
       setReceiptDraft(null);
+      setIsSavingReceipt(false);
       return;
     }
 
     const receipt = jobStatus.receipt;
     const receiptCurrency = receipt.currency ?? currency;
+    const purchaseAt = receipt.purchaseAt ?? "";
+    const purchaseDate = purchaseAt ? purchaseAt.slice(0, 10) : "";
+    const timeSlice = purchaseAt.length >= 16 ? purchaseAt.slice(11, 16) : "";
+    const purchaseTime = /\d{2}:\d{2}/.test(timeSlice) ? timeSlice : "";
+    const mappedLineItems: ReceiptDraftLineItem[] = (receipt.lineItems ?? []).map((item) => ({
+      id: item.id,
+      description: item.description ?? "",
+      quantity: item.quantity ?? "1",
+      unitPrice: formatMinorForInput(item.unitPriceMinor, receiptCurrency),
+      lineTotal: formatMinorForInput(item.lineTotalMinor, receiptCurrency),
+      category: item.category ?? "",
+    }));
+    if (mappedLineItems.length === 0) {
+      mappedLineItems.push({
+        id: null,
+        description: "",
+        quantity: "1",
+        unitPrice: "",
+        lineTotal: "",
+        category: "",
+      });
+    }
+
     setReceiptDraft({
       merchantName: receipt.merchantName ?? "",
-      purchaseDate: receipt.purchaseAt ? receipt.purchaseAt.slice(0, 10) : "",
+      purchaseDate,
+      purchaseTime,
       paymentMethod: receipt.paymentMethod ?? "",
       currency: receiptCurrency,
       total: formatMinorForInput(receipt.totalMinor, receiptCurrency),
@@ -875,44 +1033,44 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       tax: formatMinorForInput(receipt.taxMinor, receiptCurrency),
       discount: formatMinorForInput(receipt.discountMinor, receiptCurrency),
       notes: receipt.warnings.length > 0 ? receipt.warnings.join("; ") : "",
+      lineItems: mappedLineItems,
     });
   }, [currency, jobStatus?.receipt]);
 
   useEffect(() => {
-    if (createState.status === "idle") {
+    if (saveState.status === "idle") {
       return;
     }
 
-    if (createState.status === "success") {
+    if (saveState.status === "success") {
       toast({
-        title: isIndonesian ? "Transaksi dibuat" : "Transaction created",
+        title: isIndonesian ? "Transaksi disimpan" : "Transactions saved",
         description:
-          createState.message
+          saveState.message
           ?? (isIndonesian
-            ? "Transaksi dari struk berhasil ditambahkan."
-            : "Receipt details saved as a transaction."),
+            ? "Detail struk berhasil disimpan sebagai transaksi."
+            : "Receipt items were saved as transactions."),
         variant: "success",
       });
-      setIsCreatingTransaction(false);
-      setIsCreateDialogOpen(false);
+      setIsSavingReceipt(false);
       handleResetAfterSuccess();
       router.push("/app/transactions");
       return;
     }
 
-    if (createState.status === "error") {
+    if (saveState.status === "error") {
       toast({
-        title: isIndonesian ? "Gagal membuat transaksi" : "Unable to create transaction",
+        title: isIndonesian ? "Gagal menyimpan transaksi" : "Unable to save transactions",
         description:
-          createState.message
+          saveState.message
           ?? (isIndonesian
-            ? "Periksa kembali data transaksi."
-            : "Review the transaction details and try again."),
+            ? "Periksa kembali detail struk sebelum menyimpan."
+            : "Double-check the receipt details and try again."),
         variant: "error",
       });
-      setIsCreatingTransaction(false);
+      setIsSavingReceipt(false);
     }
-  }, [createState.message, createState.status, handleResetAfterSuccess, isIndonesian, router, toast]);
+  }, [handleResetAfterSuccess, isIndonesian, router, saveState.message, saveState.status, toast]);
 
   useEffect(() => {
     if (state.status === "uploading" || state.status === "tracking") {
@@ -1278,8 +1436,8 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
             toast({
               title: isIndonesian ? "Struk diproses" : "Receipt processed",
               description: isIndonesian
-                ? "Hasil parsing siap ditinjau di daftar transaksi."
-                : "Parsed details are ready in the transactions list.",
+                ? "Hasil parsing siap ditinjau sebelum disimpan."
+                : "Parsed details are ready to review before saving.",
               variant: "success",
             });
             setFile(null);
@@ -1489,13 +1647,26 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="receipt-locale">{isIndonesian ? "Locale teks" : "Text locale"}</Label>
-          <Input
-            id="receipt-locale"
+          <Label htmlFor="receipt-language">{isIndonesian ? "Bahasa struk" : "Receipt language"}</Label>
+          <select
+            id="receipt-language"
+            name="receipt-language"
+            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
             value={ocrLocale}
             onChange={(event) => setOcrLocale(event.target.value)}
-            placeholder={isIndonesian ? "id-ID" : "en-US"}
-          />
+            disabled={isBusy}
+          >
+            {localeOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-xs text-muted-foreground">
+            {isIndonesian
+              ? "Membantu pemindaian memahami format tanggal dan angka di struk."
+              : "Helps the scanner understand the receipt’s date and number format."}
+          </p>
         </div>
 
         <div className="space-y-2">
@@ -1652,170 +1823,227 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
       {hasReceiptResult ? (
         <section className="mt-6 space-y-6 rounded-lg border border-border/70 bg-card/95 p-5 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">
-                {isIndonesian ? "Tinjau hasil scan" : "Review scan results"}
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {isIndonesian
-                  ? "Perbarui detail sebelum membuat transaksi."
-                  : "Update any details before creating a transaction."}
-              </p>
+          <form
+            action={finalizeReceiptAction}
+            className="space-y-6"
+            onSubmit={(event) => {
+              if (isSavingReceipt || !canSaveReceipt) {
+                event.preventDefault();
+                return;
+              }
+              setIsSavingReceipt(true);
+            }}
+          >
+            <input type="hidden" name="receiptId" value={receiptResult?.id ?? ""} />
+            <input type="hidden" name="lineItems" value={serializedLineItems} />
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">
+                  {isIndonesian ? "Tinjau hasil scan" : "Review scan results"}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  {isIndonesian
+                    ? "Perbarui detail struk dan item sebelum menyimpan transaksi."
+                    : "Adjust the receipt details and items before saving transactions."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                {receiptConfidenceLabel ? (
+                  <span className="rounded-full border border-border/70 px-3 py-1">
+                    {isIndonesian ? "Akurasi OCR:" : "OCR confidence:"} {receiptConfidenceLabel}
+                  </span>
+                ) : null}
+                {receiptResult?.id ? (
+                  <span className="font-mono text-muted-foreground/80">#{receiptResult.id.slice(0, 8)}</span>
+                ) : null}
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-              {receiptConfidenceLabel ? (
-                <span className="rounded-full border border-border/70 px-3 py-1">
-                  {isIndonesian ? "Akurasi OCR:" : "OCR confidence:"} {receiptConfidenceLabel}
-                </span>
-              ) : null}
-              {receiptResult?.id ? (
-                <span className="font-mono text-muted-foreground/80">#{receiptResult.id.slice(0, 8)}</span>
-              ) : null}
-            </div>
-          </div>
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-            <div className="space-y-4">
-              <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/20">
-                {previewImageUrl ? (
-                  <img
-                    src={previewImageUrl}
-                    alt={isIndonesian ? "Hasil foto struk" : "Captured receipt photo"}
-                    className="w-full max-h-[420px] object-cover"
-                  />
-                ) : (
-                  <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-                    {isIndonesian
-                      ? "Preview tidak tersedia. Unggah ulang untuk melihat gambar."
-                      : "Preview unavailable. Upload again to view the image."}
+            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+              <div className="space-y-4">
+                <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/20">
+                  {previewImageUrl ? (
+                    <img
+                      src={previewImageUrl}
+                      alt={isIndonesian ? "Hasil foto struk" : "Captured receipt photo"}
+                      className="w-full max-h-[420px] object-cover"
+                    />
+                  ) : (
+                    <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
+                      {isIndonesian
+                        ? "Preview tidak tersedia. Unggah ulang untuk melihat gambar."
+                        : "Preview unavailable. Upload again to view the image."}
+                    </div>
+                  )}
+                </div>
+                {reviewWarnings.length > 0 ? (
+                  <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-200">
+                    <p className="text-sm font-medium">
+                      {isIndonesian ? "Catatan sistem" : "System notes"}
+                    </p>
+                    <ul className="mt-2 list-disc space-y-1 pl-4">
+                      {reviewWarnings.map((warning) => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
                   </div>
-                )}
+                ) : null}
               </div>
-              {reviewWarnings.length > 0 ? (
-                <div className="rounded-md border border-amber-500/60 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-200">
-                  <p className="text-sm font-medium">
-                    {isIndonesian ? "Catatan sistem" : "System notes"}
-                  </p>
-                  <ul className="mt-2 list-disc space-y-1 pl-4">
-                    {reviewWarnings.map((warning) => (
-                      <li key={warning}>{warning}</li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-            <div className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-5">
                 <div className="space-y-2">
-                  <Label htmlFor="receipt-merchant">{isIndonesian ? "Nama toko" : "Merchant"}</Label>
-                  <Input
-                    id="receipt-merchant"
-                    value={receiptDraft?.merchantName ?? ""}
-                    onChange={(event) => handleDraftChange("merchantName", event.target.value)}
-                    placeholder={isIndonesian ? "Nama merchant" : "Merchant name"}
-                    disabled={isCreatingTransaction}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-date">{isIndonesian ? "Tanggal" : "Date"}</Label>
-                  <Input
-                    id="receipt-date"
-                    type="date"
-                    value={receiptDraft?.purchaseDate ?? ""}
-                    onChange={(event) => handleDraftChange("purchaseDate", event.target.value)}
-                    disabled={isCreatingTransaction}
-                    max={new Date().toISOString().slice(0, 10)}
-                  />
-                </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-currency-preview">{isIndonesian ? "Mata uang" : "Currency"}</Label>
+                  <Label htmlFor="receipt-review-account">{isIndonesian ? "Akun pembayaran" : "Payment account"}</Label>
                   <select
-                    id="receipt-currency-preview"
+                    id="receipt-review-account"
+                    name="accountId"
                     className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={receiptDraft?.currency ?? ""}
-                    onChange={(event) => handleDraftChange("currency", event.target.value)}
-                    disabled={isCreatingTransaction}
+                    value={accountId}
+                    onChange={(event) => setAccountId(event.target.value)}
+                    disabled={!hasAccounts || isSavingReceipt}
+                    required
                   >
-                    {ACCOUNT_CURRENCY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
+                    <option value="" disabled>
+                      {isIndonesian ? "Pilih akun pembayaran" : "Select a payment account"}
+                    </option>
+                    {accounts.map((accountOption) => (
+                      <option key={accountOption.id} value={accountOption.id}>
+                        {accountOption.name}
                       </option>
                     ))}
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-payment">{isIndonesian ? "Metode bayar" : "Payment method"}</Label>
-                  <Input
-                    id="receipt-payment"
-                    value={receiptDraft?.paymentMethod ?? ""}
-                    onChange={(event) => handleDraftChange("paymentMethod", event.target.value)}
-                    placeholder={isIndonesian ? "Contoh: Tunai / Kartu" : "e.g. Cash / Card"}
-                    disabled={isCreatingTransaction}
-                  />
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-merchant">{isIndonesian ? "Nama toko" : "Merchant"}</Label>
+                    <Input
+                      id="receipt-merchant"
+                      name="merchantName"
+                      value={receiptDraft?.merchantName ?? ""}
+                      onChange={(event) => handleDraftChange("merchantName", event.target.value)}
+                      placeholder={isIndonesian ? "Nama merchant" : "Merchant name"}
+                      disabled={isSavingReceipt}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-payment">{isIndonesian ? "Metode bayar" : "Payment method"}</Label>
+                    <Input
+                      id="receipt-payment"
+                      name="paymentMethod"
+                      value={receiptDraft?.paymentMethod ?? ""}
+                      onChange={(event) => handleDraftChange("paymentMethod", event.target.value)}
+                      placeholder={isIndonesian ? "Contoh: Tunai / Kartu" : "e.g. Cash / Card"}
+                      disabled={isSavingReceipt}
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-total">{isIndonesian ? "Total" : "Total"}</Label>
-                  <Input
-                    id="receipt-total"
-                    inputMode="decimal"
-                    step={receiptCurrencyStep}
-                    value={receiptDraft?.total ?? ""}
-                    onChange={(event) => handleDraftChange("total", event.target.value)}
-                    disabled={isCreatingTransaction}
-                  />
-                  {receiptDraft?.currency && previewTotalMinor !== null ? (
-                    <p className="text-xs text-muted-foreground">
-                      ≈ {formatCurrency(previewTotalMinor, receiptDraft.currency)}
-                    </p>
-                  ) : null}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-date">{isIndonesian ? "Tanggal" : "Date"}</Label>
+                    <Input
+                      id="receipt-date"
+                      name="purchaseDate"
+                      type="date"
+                      value={receiptDraft?.purchaseDate ?? ""}
+                      onChange={(event) => handleDraftChange("purchaseDate", event.target.value)}
+                      disabled={isSavingReceipt}
+                      max={new Date().toISOString().slice(0, 10)}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-time">{isIndonesian ? "Waktu" : "Time"}</Label>
+                    <Input
+                      id="receipt-time"
+                      name="purchaseTime"
+                      type="time"
+                      value={receiptDraft?.purchaseTime ?? ""}
+                      onChange={(event) => handleDraftChange("purchaseTime", event.target.value)}
+                      disabled={isSavingReceipt}
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-subtotal">{isIndonesian ? "Subtotal" : "Subtotal"}</Label>
-                  <Input
-                    id="receipt-subtotal"
-                    inputMode="decimal"
-                    step={receiptCurrencyStep}
-                    value={receiptDraft?.subtotal ?? ""}
-                    onChange={(event) => handleDraftChange("subtotal", event.target.value)}
-                    disabled={isCreatingTransaction}
-                  />
-                  {receiptDraft?.currency && previewSubtotalMinor !== null ? (
-                    <p className="text-xs text-muted-foreground">
-                      ≈ {formatCurrency(previewSubtotalMinor, receiptDraft.currency)}
-                    </p>
-                  ) : null}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-currency-preview">{isIndonesian ? "Mata uang" : "Currency"}</Label>
+                    <select
+                      id="receipt-currency-preview"
+                      name="currency"
+                      className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                      value={receiptDraft?.currency ?? ""}
+                      onChange={(event) => handleDraftChange("currency", event.target.value)}
+                      disabled={isSavingReceipt}
+                    >
+                      {ACCOUNT_CURRENCY_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-total">{isIndonesian ? "Total" : "Total"}</Label>
+                    <Input
+                      id="receipt-total"
+                      name="total"
+                      inputMode="decimal"
+                      step={receiptCurrencyStep}
+                      value={receiptDraft?.total ?? ""}
+                      onChange={(event) => handleDraftChange("total", event.target.value)}
+                      disabled={isSavingReceipt}
+                      required
+                    />
+                    {receiptDraft?.currency && previewTotalMinor !== null ? (
+                      <p className="text-xs text-muted-foreground">
+                        ≈ {formatCurrency(previewTotalMinor, receiptDraft.currency)}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-              </div>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="receipt-tax">{isIndonesian ? "Pajak" : "Tax"}</Label>
-                  <Input
-                    id="receipt-tax"
-                    inputMode="decimal"
-                    step={receiptCurrencyStep}
-                    value={receiptDraft?.tax ?? ""}
-                    onChange={(event) => handleDraftChange("tax", event.target.value)}
-                    disabled={isCreatingTransaction}
-                  />
-                  {receiptDraft?.currency && previewTaxMinor !== null ? (
-                    <p className="text-xs text-muted-foreground">
-                      ≈ {formatCurrency(previewTaxMinor, receiptDraft.currency)}
-                    </p>
-                  ) : null}
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-subtotal">{isIndonesian ? "Subtotal" : "Subtotal"}</Label>
+                    <Input
+                      id="receipt-subtotal"
+                      name="subtotal"
+                      inputMode="decimal"
+                      step={receiptCurrencyStep}
+                      value={receiptDraft?.subtotal ?? ""}
+                      onChange={(event) => handleDraftChange("subtotal", event.target.value)}
+                      disabled={isSavingReceipt}
+                    />
+                    {receiptDraft?.currency && previewSubtotalMinor !== null ? (
+                      <p className="text-xs text-muted-foreground">
+                        ≈ {formatCurrency(previewSubtotalMinor, receiptDraft.currency)}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="receipt-tax">{isIndonesian ? "Pajak" : "Tax"}</Label>
+                    <Input
+                      id="receipt-tax"
+                      name="tax"
+                      inputMode="decimal"
+                      step={receiptCurrencyStep}
+                      value={receiptDraft?.tax ?? ""}
+                      onChange={(event) => handleDraftChange("tax", event.target.value)}
+                      disabled={isSavingReceipt}
+                    />
+                    {receiptDraft?.currency && previewTaxMinor !== null ? (
+                      <p className="text-xs text-muted-foreground">
+                        ≈ {formatCurrency(previewTaxMinor, receiptDraft.currency)}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="receipt-discount">{isIndonesian ? "Diskon" : "Discount"}</Label>
                   <Input
                     id="receipt-discount"
+                    name="discount"
                     inputMode="decimal"
                     step={receiptCurrencyStep}
                     value={receiptDraft?.discount ?? ""}
                     onChange={(event) => handleDraftChange("discount", event.target.value)}
-                    disabled={isCreatingTransaction}
+                    disabled={isSavingReceipt}
                   />
                   {receiptDraft?.currency && previewDiscountMinor !== null ? (
                     <p className="text-xs text-muted-foreground">
@@ -1823,139 +2051,176 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
                     </p>
                   ) : null}
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="receipt-notes">{isIndonesian ? "Catatan" : "Notes"}</Label>
-                <textarea
-                  id="receipt-notes"
-                  className={TEXTAREA_BASE_CLASSES}
-                  value={receiptDraft?.notes ?? ""}
-                  onChange={(event) => handleDraftChange("notes", event.target.value)}
-                  placeholder={isIndonesian ? "Catatan tambahan (opsional)" : "Additional notes (optional)"}
-                  disabled={isCreatingTransaction}
-                />
-              </div>
-              <div className="flex flex-wrap justify-end gap-2 pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleResetAfterSuccess()}
-                  disabled={isCreatingTransaction}
-                >
-                  {isIndonesian ? "Unggah struk baru" : "Upload another receipt"}
-                </Button>
-                <Button
-                  type="button"
-                  onClick={() => {
-                    setIsCreateDialogOpen(true);
-                    setIsCreatingTransaction(false);
-                  }}
-                  disabled={!canCreateTransaction || isCreatingTransaction}
-                >
-                  {isCreatingTransaction
-                    ? isIndonesian
-                      ? "Menyimpan..."
-                      : "Saving..."
-                    : isIndonesian
-                      ? "Buat transaksi"
-                      : "Create transaction"}
-                </Button>
+                <div className="space-y-2">
+                  <Label htmlFor="receipt-notes">{isIndonesian ? "Catatan" : "Notes"}</Label>
+                  <textarea
+                    id="receipt-notes"
+                    name="notes"
+                    className={TEXTAREA_BASE_CLASSES}
+                    value={receiptDraft?.notes ?? ""}
+                    onChange={(event) => handleDraftChange("notes", event.target.value)}
+                    placeholder={isIndonesian ? "Catatan tambahan (opsional)" : "Additional notes (optional)"}
+                    disabled={isSavingReceipt}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold text-foreground">
+                      {isIndonesian ? "Item struk" : "Receipt items"}
+                    </h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddLineItem}
+                      disabled={isSavingReceipt}
+                    >
+                      {isIndonesian ? "Tambah item" : "Add item"}
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    {receiptDraft?.lineItems.map((item, index) => (
+                      <div key={item.id ?? `draft-item-${index}`} className="space-y-3 rounded-md border border-border/60 bg-background/80 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="text-sm font-medium text-foreground">
+                            {isIndonesian ? `Item ${index + 1}` : `Item ${index + 1}`}
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveLineItem(index)}
+                            disabled={isSavingReceipt}
+                          >
+                            {isIndonesian ? "Hapus" : "Remove"}
+                          </Button>
+                        </div>
+                        <div className="space-y-3">
+                          <div className="space-y-2">
+                            <Label htmlFor={`receipt-line-description-${index}`}>
+                              {isIndonesian ? "Deskripsi" : "Description"}
+                            </Label>
+                            <Input
+                              id={`receipt-line-description-${index}`}
+                              value={item.description}
+                              onChange={(event) => handleLineItemFieldChange(index, "description", event.target.value)}
+                              placeholder={isIndonesian ? "Contoh: Ayam goreng" : "e.g. Fried chicken"}
+                              disabled={isSavingReceipt}
+                              required
+                            />
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`receipt-line-quantity-${index}`}>
+                                {isIndonesian ? "Jumlah" : "Quantity"}
+                              </Label>
+                              <Input
+                                id={`receipt-line-quantity-${index}`}
+                                value={item.quantity}
+                                inputMode="decimal"
+                                step="0.001"
+                                onChange={(event) => handleLineItemFieldChange(index, "quantity", event.target.value)}
+                                disabled={isSavingReceipt}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`receipt-line-unit-${index}`}>
+                                {isIndonesian ? "Harga satuan" : "Unit price"}
+                              </Label>
+                              <Input
+                                id={`receipt-line-unit-${index}`}
+                                value={item.unitPrice}
+                                inputMode="decimal"
+                                step={receiptCurrencyStep}
+                                onChange={(event) => handleLineItemFieldChange(index, "unitPrice", event.target.value)}
+                                disabled={isSavingReceipt}
+                              />
+                            </div>
+                          </div>
+                          <div className="grid gap-3 md:grid-cols-2">
+                            <div className="space-y-2">
+                              <Label htmlFor={`receipt-line-total-${index}`}>
+                                {isIndonesian ? "Total baris" : "Line total"}
+                              </Label>
+                              <Input
+                                id={`receipt-line-total-${index}`}
+                                value={item.lineTotal}
+                                inputMode="decimal"
+                                step={receiptCurrencyStep}
+                                onChange={(event) => handleLineItemFieldChange(index, "lineTotal", event.target.value)}
+                                disabled={isSavingReceipt}
+                                required
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor={`receipt-line-category-${index}`}>
+                                {isIndonesian ? "Kategori (opsional)" : "Category (optional)"}
+                              </Label>
+                              <Input
+                                id={`receipt-line-category-${index}`}
+                                value={item.category}
+                                onChange={(event) => handleLineItemFieldChange(index, "category", event.target.value)}
+                                placeholder={isIndonesian ? "contoh: makanan/coffee" : "e.g. food/coffee"}
+                                disabled={isSavingReceipt}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {receiptDraft?.currency && formattedLineItemsTotal ? (
+                    <div className="space-y-1 rounded-md border border-border/60 bg-muted/30 p-3 text-xs text-muted-foreground">
+                      <div className="flex items-center justify-between">
+                        <span>{isIndonesian ? "Jumlah item" : "Items total"}</span>
+                        <span className="font-medium text-foreground">{formattedLineItemsTotal}</span>
+                      </div>
+                      {formattedTotal ? (
+                        <div className="flex items-center justify-between">
+                          <span>{isIndonesian ? "Total struk" : "Receipt total"}</span>
+                          <span className="font-medium text-foreground">{formattedTotal}</span>
+                        </div>
+                      ) : null}
+                      {lineItemsDeltaLabel ? (
+                        <p
+                          className={`pt-1 ${lineItemsDeltaIsPositive ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-300"}`}
+                        >
+                          {isIndonesian
+                            ? lineItemsDeltaIsPositive
+                              ? `Total item lebih ${lineItemsDeltaLabel} dari total struk.`
+                              : `Total item kurang ${lineItemsDeltaLabel} dari total struk.`
+                            : lineItemsDeltaIsPositive
+                              ? `Items exceed the receipt total by ${lineItemsDeltaLabel}.`
+                              : `Items fall short of the receipt total by ${lineItemsDeltaLabel}.`}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+                <div className="flex flex-wrap justify-end gap-2 pt-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleResetAfterSuccess()}
+                    disabled={isSavingReceipt}
+                  >
+                    {isIndonesian ? "Unggah struk baru" : "Upload another receipt"}
+                  </Button>
+                  <Button type="submit" disabled={!canSaveReceipt || isSavingReceipt}>
+                    {isSavingReceipt
+                      ? isIndonesian
+                        ? "Menyimpan..."
+                        : "Saving..."
+                      : isIndonesian
+                        ? "Simpan transaksi"
+                        : "Save transactions"}
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          </form>
         </section>
       ) : null}
-
-      <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
-        <DialogContent className="max-w-lg space-y-4">
-          <DialogHeader>
-            <DialogTitle>
-              {isIndonesian ? "Buat transaksi dari struk" : "Create transaction from receipt"}
-            </DialogTitle>
-          </DialogHeader>
-          <form
-            action={createTransactionFormAction}
-            className="space-y-4"
-            onSubmit={() => setIsCreatingTransaction(true)}
-          >
-            <input type="hidden" name="type" value="expense" />
-            <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-account">{isIndonesian ? "Akun" : "Account"}</Label>
-              <select
-                id="receipt-dialog-account"
-                name="accountId"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                defaultValue={defaultDialogAccountId}
-                required
-                disabled={isCreatingTransaction}
-              >
-                <option value="" disabled>
-                  {isIndonesian ? "Pilih akun pembayaran" : "Select a payment account"}
-                </option>
-                {accounts.map((accountOption) => (
-                  <option key={accountOption.id} value={accountOption.id}>
-                    {accountOption.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-amount">{isIndonesian ? "Jumlah" : "Amount"}</Label>
-              <Input
-                id="receipt-dialog-amount"
-                name="amount"
-                inputMode="decimal"
-                step={receiptCurrencyStep}
-                defaultValue={receiptDraft?.total ?? ""}
-                required
-                disabled={isCreatingTransaction}
-              />
-              {receiptDraft?.currency && previewTotalMinor !== null ? (
-                <p className="text-xs text-muted-foreground">
-                  {formatCurrency(previewTotalMinor, receiptDraft.currency)}
-                </p>
-              ) : null}
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-date">{isIndonesian ? "Tanggal" : "Date"}</Label>
-              <Input
-                id="receipt-dialog-date"
-                name="occurredAt"
-                type="date"
-                defaultValue={defaultOccurredAt}
-                required
-                disabled={isCreatingTransaction}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="receipt-dialog-description">{isIndonesian ? "Deskripsi" : "Description"}</Label>
-              <Input
-                id="receipt-dialog-description"
-                name="description"
-                defaultValue={defaultDescription}
-                placeholder={isIndonesian ? "Judul transaksi" : "Transaction title"}
-                disabled={isCreatingTransaction}
-              />
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost" disabled={isCreatingTransaction}>
-                  {isIndonesian ? "Batal" : "Cancel"}
-                </Button>
-              </DialogClose>
-              <Button type="submit" disabled={isCreatingTransaction || !canCreateTransaction}>
-                {isCreatingTransaction
-                  ? isIndonesian
-                    ? "Menyimpan..."
-                    : "Saving..."
-                  : isIndonesian
-                    ? "Simpan transaksi"
-                    : "Save transaction"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
 
       {isProgressVisible ? (
         <div
