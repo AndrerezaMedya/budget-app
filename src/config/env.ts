@@ -21,6 +21,7 @@ const serverSchema = z.object({
   GEMINI_API_KEY: z.string().min(1, "Missing GEMINI_API_KEY").optional(),
   GEMINI_API_BASE_URL: z.string().url("GEMINI_API_BASE_URL must be a valid URL").optional(),
   GEMINI_RECEIPT_MODEL: z.string().min(1).optional(),
+  GEMINI_RECEIPT_SECONDARY_MODEL: z.string().min(1).optional(),
 });
 
 const clientEnv = clientSchema.safeParse({
@@ -45,6 +46,7 @@ const serverEnv = serverSchema.safeParse({
   GEMINI_API_KEY: process.env.GEMINI_API_KEY,
   GEMINI_API_BASE_URL: process.env.GEMINI_API_BASE_URL,
   GEMINI_RECEIPT_MODEL: process.env.GEMINI_RECEIPT_MODEL,
+  GEMINI_RECEIPT_SECONDARY_MODEL: process.env.GEMINI_RECEIPT_SECONDARY_MODEL,
 });
 
 if (!serverEnv.success) {
