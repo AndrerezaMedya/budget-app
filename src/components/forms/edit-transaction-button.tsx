@@ -86,6 +86,11 @@ export function EditTransactionButton({ transaction, accounts }: EditTransaction
   const { t } = useI18n();
   const [state, formAction, isPending] = useActionState(updateTransactionAction, initialActionState);
   const statusRef = useRef(state.status);
+  const [timezoneOffsetMinutes, setTimezoneOffsetMinutes] = useState("0");
+
+  useEffect(() => {
+    setTimezoneOffsetMinutes(String(new Date().getTimezoneOffset()));
+  }, []);
   const hasAccounts = accounts.length > 0;
   const isExpense = transaction.type === "expense";
   const isIncome = transaction.type === "income";
@@ -214,6 +219,7 @@ export function EditTransactionButton({ transaction, accounts }: EditTransaction
             </div>
             <form ref={formRef} action={formAction} className="space-y-4 px-4 py-4">
               <input type="hidden" name="transactionId" value={transaction.id} />
+              <input type="hidden" name="timezoneOffset" value={timezoneOffsetMinutes} />
               <div className="space-y-2">
                 <Label htmlFor={`edit-transaction-account-${transaction.id}`}>Akun</Label>
                 <select

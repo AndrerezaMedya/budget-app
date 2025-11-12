@@ -63,6 +63,11 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
   const statusRef = useRef(state.status);
   const [tagResetKey, setTagResetKey] = useState(0);
   const { t } = useI18n();
+  const [timezoneOffsetMinutes, setTimezoneOffsetMinutes] = useState("0");
+
+  useEffect(() => {
+    setTimezoneOffsetMinutes(String(new Date().getTimezoneOffset()));
+  }, []);
 
   useEffect(() => {
     if (state.status === statusRef.current) {
@@ -239,6 +244,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
           action={formAction}
           className={formClasses}
         >
+          <input type="hidden" name="timezoneOffset" value={timezoneOffsetMinutes} />
           <Button asChild variant="outline" size="sm" className="w-full justify-center">
             <Link href="/app/receipts">
               <Scan className="mr-2 h-4 w-4" />
