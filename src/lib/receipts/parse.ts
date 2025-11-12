@@ -1,10 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 import { PREDEFINED_CATEGORIES } from "@/config/category-definitions";
+import { DEFAULT_RECEIPT_REASONING_MODEL } from "@/config/receipts";
 import { env } from "@/config/env";
 import { receiptSchema, type ReceiptPayload } from "@/schemas/receipt";
-
-const DEFAULT_MODEL = "gemini-2.5-flash-lite";
 
 function getGeminiClient() {
   if (!env.GEMINI_API_KEY) {
@@ -74,12 +73,19 @@ export type ReceiptReasoningInput = {
   localeHint?: string | null;
 };
 
+type ReceiptParsingOptions = {
+  model?: string | null;
+};
+
 export async function requestReceiptParsing(
   input: ReceiptReasoningInput,
+  options?: ReceiptParsingOptions,
 ): Promise<ReceiptPayload> {
   const client = getGeminiClient();
+  const requestedModel = options?.model && options.model.trim().length > 0 ? options.model.trim() : null;
+  const resolvedModel = requestedModel ?? env.GEMINI_RECEIPT_MODEL ?? DEFAULT_RECEIPT_REASONING_MODEL;
   const model = client.getGenerativeModel({
-    model: env.GEMINI_RECEIPT_MODEL ?? DEFAULT_MODEL,
+    model: resolvedModel,
     generationConfig: {
       responseMimeType: "application/json",
       temperature: 0.2,
