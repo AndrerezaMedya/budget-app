@@ -359,7 +359,7 @@ export default async function OverviewPage({ searchParams }: OverviewPageProps) 
           </CardHeader>
           <CardContent className="p-6">
             {categoryChartHasData ? (
-              <div className="h-[280px]">
+              <div className="lg:h-[280px]">
                 <CategorySpendDonut
                   data={categoryChartData}
                   locale={locale}
