@@ -3,6 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 
 import { DEFAULT_CURRENCY, getCurrencyDecimals } from "@/config/currencies";
+import { env } from "@/config/env";
+import {
+  DEFAULT_RECEIPT_REASONING_MODEL,
+  SECONDARY_RECEIPT_REASONING_MODEL,
+  resolveReasoningModelChoice,
+} from "@/config/receipts";
 import { preprocessReceiptImage } from "@/lib/receipts/preprocess";
 import { generatePerceptualHash } from "@/lib/receipts/dedupe";
 import { performReceiptOcr } from "@/lib/receipts/ocr";
@@ -342,6 +348,14 @@ export async function POST(request: NextRequest) {
     }
 
     const modeField = formData.get("mode");
+    const modelField = formData.get("model");
+    const reasoningModelChoice = resolveReasoningModelChoice(
+      typeof modelField === "string" ? modelField : null,
+    );
+    const reasoningModelName =
+      reasoningModelChoice === SECONDARY_RECEIPT_REASONING_MODEL
+        ? env.GEMINI_RECEIPT_SECONDARY_MODEL ?? SECONDARY_RECEIPT_REASONING_MODEL
+        : env.GEMINI_RECEIPT_MODEL ?? DEFAULT_RECEIPT_REASONING_MODEL;
     const processingMode: ProcessingMode =
       typeof modeField === "string" && modeField.toLowerCase() === "direct"
         ? "direct"
@@ -376,7 +390,7 @@ export async function POST(request: NextRequest) {
       progress_stage: "uploading",
       progress_value: resolvedProgressValue("uploading"),
       progress_message: PROGRESS_DESCRIPTORS.uploading.description,
-      progress_detail: { pipeline: processingMode } as Json,
+      progress_detail: { pipeline: processingMode, model: reasoningModelChoice } as Json,
     });
 
     receiptJobId = receiptJob.id;
@@ -389,7 +403,7 @@ export async function POST(request: NextRequest) {
           processingMode === "enhanced"
             ? PROGRESS_DESCRIPTORS.enhancing.description
             : "Menggunakan gambar asli tanpa preprocessing tambahan.",
-        detail: { pipeline: processingMode } as Json,
+        detail: { pipeline: processingMode, model: reasoningModelChoice } as Json,
       });
 
       const extension = detectExtension(file.type ?? null, file.name);
@@ -410,7 +424,7 @@ export async function POST(request: NextRequest) {
       if (processingMode === "enhanced") {
         await updateProgress("ocr", resolvedProgressValue("ocr", 0), {
           message: PROGRESS_DESCRIPTORS.ocr.description,
-          detail: { pipeline: processingMode, ocr: { status: "starting", progress: 0 } } as Json,
+          detail: { pipeline: processingMode, model: reasoningModelChoice, ocr: { status: "starting", progress: 0 } } as Json,
         });
 
         let lastOcrUpdate = 0;
@@ -434,7 +448,7 @@ export async function POST(request: NextRequest) {
                 progress_stage: "ocr",
                 progress_value: percent,
                 progress_message: message,
-                progress_detail: { pipeline: processingMode, ocr: { status, progress: safeProgress } },
+                progress_detail: { pipeline: processingMode, model: reasoningModelChoice, ocr: { status, progress: safeProgress } },
               })
                 .then(() => undefined)
                 .catch(() => undefined),
@@ -451,34 +465,39 @@ export async function POST(request: NextRequest) {
 
         await updateProgress("ocr", resolvedProgressValue("ocr", 1), {
           message: "Pembacaan teks selesai",
-          detail: { pipeline: processingMode, ocr: { status: "done", progress: 1, confidence: ocrConfidence } } as Json,
+          detail: { pipeline: processingMode, model: reasoningModelChoice, ocr: { status: "done", progress: 1, confidence: ocrConfidence } } as Json,
         });
       } else {
         await updateProgress("ocr", resolvedProgressValue("ocr", 1), {
           message: "Lewati OCR, mengirim langsung ke LLM",
-          detail: { pipeline: processingMode, ocr: { status: "skipped", progress: 1 } } as Json,
+          detail: { pipeline: processingMode, model: reasoningModelChoice, ocr: { status: "skipped", progress: 1 } } as Json,
         });
       }
 
       currentStage = "interpreting";
       await updateProgress("interpreting", resolvedProgressValue("interpreting"), {
         message: PROGRESS_DESCRIPTORS.interpreting.description,
+        detail: { pipeline: processingMode, model: reasoningModelChoice } as Json,
       });
 
-      const parsed = await requestReceiptParsing({
-        image: {
-          base64: originalBuffer.toString("base64"),
-          mimeType: file.type || "image/jpeg",
+      const parsed = await requestReceiptParsing(
+        {
+          image: {
+            base64: originalBuffer.toString("base64"),
+            mimeType: file.type || "image/jpeg",
+          },
+          ocrText,
+          currencyHint: currencyOverride,
+          totalsHint: null,
+          localeHint: localeOverride,
         },
-        ocrText,
-        currencyHint: currencyOverride,
-        totalsHint: null,
-        localeHint: localeOverride,
-      });
+        { model: reasoningModelName },
+      );
 
       currentStage = "validating";
       await updateProgress("validating", resolvedProgressValue("validating"), {
         message: PROGRESS_DESCRIPTORS.validating.description,
+        detail: { pipeline: processingMode, model: reasoningModelChoice } as Json,
       });
 
       const normalizedReceipt = normalizeReceiptForPersistence(parsed, {
@@ -499,6 +518,7 @@ export async function POST(request: NextRequest) {
       currentStage = "persisting";
       await updateProgress("persisting", resolvedProgressValue("persisting"), {
         message: PROGRESS_DESCRIPTORS.persisting.description,
+        detail: { pipeline: processingMode, model: reasoningModelChoice } as Json,
       });
 
       const supabase = createSupabaseServiceClient();
@@ -573,6 +593,7 @@ export async function POST(request: NextRequest) {
       const rawMessage = innerError instanceof Error ? innerError.message : "Unknown error";
       const isValidationError = innerError instanceof ZodError;
       const failureStage: ProgressStage = isValidationError ? "validating" : currentStage;
+  const failureCopyKey = (failureStage ?? "failed") as Exclude<ProgressStage, "done">;
       const friendlyMessage = isValidationError
         ? "Struk belum terbaca lengkap. Pastikan semua item dan total terlihat jelas, lalu coba lagi."
         : rawMessage;
@@ -594,7 +615,7 @@ export async function POST(request: NextRequest) {
         error_code: failureStage,
         progress_stage: "failed",
         progress_value: clampProgress(100),
-        progress_message: ERROR_COPY_BY_STAGE[failureStage] ?? ERROR_COPY_BY_STAGE.failed,
+        progress_message: ERROR_COPY_BY_STAGE[failureCopyKey],
         progress_detail: detail,
       });
 
