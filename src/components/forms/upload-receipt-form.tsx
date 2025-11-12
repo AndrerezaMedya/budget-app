@@ -15,6 +15,11 @@ import {
 import { useRouter } from "next/navigation";
 
 import { ACCOUNT_CURRENCY_OPTIONS, getCurrencyDecimals } from "@/config/currencies";
+import {
+  DEFAULT_RECEIPT_REASONING_MODEL,
+  RECEIPT_REASONING_MODEL_OPTIONS,
+  type ReceiptReasoningModelValue,
+} from "@/config/receipts";
 import { finalizeReceiptTransactionsAction } from "@/actions/receipts";
 import { initialActionState } from "@/actions/types";
 import { useToast } from "@/components/providers/toast-provider";
@@ -211,6 +216,33 @@ function resolveProgressSteps(locale: string): LocalizedProgressStep[] {
   ];
 }
 
+async function waitForReceiptAvailability(receiptId: string, maxAttempts = 12, baseDelayMs = 350) {
+  const supabase = getSupabaseBrowserClient();
+
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      const { data } = await supabase
+        .from("receipts")
+        .select("id")
+        .eq("id", receiptId)
+        .maybeSingle();
+
+      if (data?.id) {
+        return true;
+      }
+    } catch (error) {
+      console.warn("Waiting for receipt availability failed", { receiptId, attempt, error });
+    }
+
+    const delay = baseDelayMs + attempt * 75;
+    await new Promise((resolve) => {
+      setTimeout(resolve, delay);
+    });
+  }
+
+  return false;
+}
+
 function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | "unknown", string> {
   if (locale.startsWith("id")) {
     return {
@@ -219,7 +251,7 @@ function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | 
       ocr: "Teks sulit terbaca. Coba foto lebih dekat atau rata.",
       interpreting: "Data belanja sulit disusun. Coba unggah ulang struk.",
       validating: "Total tidak konsisten. Periksa kembali total di struk.",
-  persisting: "Tidak bisa menyimpan struk. Coba lagi sebentar.",
+      persisting: "Tidak bisa menyimpan struk. Coba lagi sebentar.",
       done: "Berhasil! Struk tersimpan.",
       failed: "Terjadi kesalahan saat memproses struk.",
       unknown: "Proses struk terhenti. Coba lagi.",
@@ -232,7 +264,7 @@ function resolveErrorCopyByStage(locale: string): Record<ReceiptProgressStage | 
     ocr: "Text was hard to read. Try a closer, flatter photo.",
     interpreting: "Receipt data was hard to interpret. Please upload again.",
     validating: "Totals looked inconsistent. Double-check the receipt.",
-  persisting: "Unable to store the receipt. Try again shortly.",
+    persisting: "Unable to store the receipt. Try again shortly.",
     done: "Success! Receipt stored.",
     failed: "An error occurred while processing the receipt.",
     unknown: "Receipt processing stopped unexpectedly. Try again.",
@@ -266,7 +298,16 @@ function normalizeProgressDetail(payload: unknown): ProgressDetail | null {
   }
 
   const detail: ProgressDetail = {};
-  const raw = payload as { ocr?: unknown };
+  const raw = payload as { ocr?: unknown; pipeline?: unknown; model?: unknown };
+  if (typeof raw.pipeline === "string") {
+    const normalized = raw.pipeline.toLowerCase();
+    if (normalized === "enhanced" || normalized === "direct") {
+      detail.pipeline = normalized;
+    }
+  }
+  if (typeof raw.model === "string" && raw.model.trim().length > 0) {
+    detail.model = raw.model;
+  }
   if (raw.ocr && typeof raw.ocr === "object") {
     const ocr = raw.ocr as { status?: unknown; progress?: unknown; confidence?: unknown };
     const status = typeof ocr.status === "string" ? ocr.status : "";
@@ -330,6 +371,8 @@ type ReceiptProgressStage =
   | "failed";
 
 type ProgressDetail = {
+  pipeline?: ProcessingMode;
+  model?: ReceiptReasoningModelValue | string;
   ocr?: {
     status: string;
     progress: number;
@@ -468,6 +511,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   const [receiptDraft, setReceiptDraft] = useState<ReceiptDraft | null>(null);
   const [isSavingReceipt, setIsSavingReceipt] = useState(false);
   const [processingMode, setProcessingMode] = useState<ProcessingMode>("enhanced");
+  const [reasoningModel, setReasoningModel] = useState<ReceiptReasoningModelValue>(DEFAULT_RECEIPT_REASONING_MODEL);
   const [displayStageIndex, setDisplayStageIndex] = useState(0);
   const stageAdvanceTimeoutRef = useRef<number | null>(null);
   const { toast } = useToast();
@@ -485,6 +529,15 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       OCR_LOCALE_OPTIONS.map((option) => ({
         value: option.value,
         label: isIndonesian ? option.label.id : option.label.en,
+      })),
+    [isIndonesian],
+  );
+  const reasoningModelOptions = useMemo(
+    () =>
+      RECEIPT_REASONING_MODEL_OPTIONS.map((option) => ({
+        value: option.value as ReceiptReasoningModelValue,
+        label: isIndonesian ? option.label.id : option.label.en,
+        description: isIndonesian ? option.description.id : option.description.en,
       })),
     [isIndonesian],
   );
@@ -540,7 +593,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
       setReceiptDraft(null);
       setTransientNotice(null);
       setIsProgressVisible(false);
-  setIsSavingReceipt(false);
+      setIsSavingReceipt(false);
       clearStageAdvanceTimer();
       setDisplayStageIndex(0);
     },
@@ -645,10 +698,11 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     setStoragePreviewUrl(null);
     setPreviewUrl(null);
     setIsSavingReceipt(false);
+    setReasoningModel(DEFAULT_RECEIPT_REASONING_MODEL);
     lastProgressStageRef.current = "uploading";
     clearStageAdvanceTimer();
     setDisplayStageIndex(0);
-  }, [clearStageAdvanceTimer, setActiveJobId, setFile, setIsProgressVisible, setJobStatus, setPreviewUrl, setReceiptDraft, setState]);
+  }, [clearStageAdvanceTimer, setActiveJobId, setFile, setIsProgressVisible, setJobStatus, setPreviewUrl, setReceiptDraft, setReasoningModel, setState]);
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -687,6 +741,17 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     : state.status === "tracking"
       ? fetchingStatusLabel
       : null;
+  const jobDetailModel = jobStatus?.progressDetail?.model ?? null;
+
+  useEffect(() => {
+    if (typeof jobDetailModel !== "string") {
+      return;
+    }
+    const match = RECEIPT_REASONING_MODEL_OPTIONS.find((option) => option.value === jobDetailModel);
+    if (match && reasoningModel !== match.value) {
+      setReasoningModel(match.value);
+    }
+  }, [jobDetailModel, reasoningModel, setReasoningModel]);
   const failingStage = (jobStatus?.errorCode as ReceiptProgressStage | null) ?? null;
   const activeProgressStage: ReceiptProgressStage = useMemo(() => {
     if (state.status === "error") {
@@ -932,9 +997,9 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
   ) ?? false;
   const canSaveReceipt = Boolean(
     receiptDraft
-      && accountId
-      && receiptDraft.total.trim().length > 0
-      && hasValidLineItems,
+    && accountId
+    && receiptDraft.total.trim().length > 0
+    && hasValidLineItems,
   );
   const lineItemsDeltaMinor = previewTotalMinor !== null && lineItemsTotalMinor !== null ? lineItemsTotalMinor - previewTotalMinor : null;
   const formattedLineItemsTotal = receiptDraft?.currency && lineItemsTotalMinor !== null
@@ -1300,6 +1365,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
     formData.append("currency", currency.toUpperCase());
     formData.append("locale", ocrLocale);
     formData.append("mode", processingMode);
+    formData.append("model", reasoningModel);
 
     setState({ status: "uploading" });
     setJobStatus(null);
@@ -1426,22 +1492,40 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
         if (nextStatus.status === "succeeded") {
           lastProgressStageRef.current = "done";
-          const receiptId = nextStatus.receipt?.id ?? null;
-          if (nextStatus.receipt) {
+          const receiptPayload = nextStatus.receipt;
+          const resolvedReceiptId = typeof receiptPayload?.id === "string" && receiptPayload.id.trim().length > 0
+            ? receiptPayload.id
+            : null;
+          if (receiptPayload && resolvedReceiptId) {
+            const accountQuery = accountId ? `?accountId=${encodeURIComponent(accountId)}` : "";
+            const reviewUrl = `/app/receipts/review/${resolvedReceiptId}${accountQuery}`;
+
             setState({
               status: "success",
-              receiptId: receiptId ?? nextStatus.receipt.id,
-              warnings: nextStatus.receipt.warnings,
+              receiptId: resolvedReceiptId,
+              warnings: receiptPayload.warnings,
             });
             toast({
               title: isIndonesian ? "Struk diproses" : "Receipt processed",
               description: isIndonesian
-                ? "Hasil parsing siap ditinjau sebelum disimpan."
-                : "Parsed details are ready to review before saving.",
+                ? "Mengalihkan ke halaman tinjau struk."
+                : "Redirecting you to the receipt review page.",
               variant: "success",
             });
             setFile(null);
             setTransientNotice(null);
+
+            await waitForReceiptAvailability(resolvedReceiptId);
+
+            const redirect = () => {
+              router.push(reviewUrl);
+              handleResetAfterSuccess();
+            };
+            if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+              window.requestAnimationFrame(redirect);
+            } else {
+              redirect();
+            }
           } else {
             const message = isIndonesian
               ? "Struk selesai, tetapi data tidak ditemukan."
@@ -1511,7 +1595,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
         clearTimeout(timeoutId);
       }
     };
-  }, [activeJobId, errorCopyByStage, isIndonesian, toast]);
+  }, [activeJobId, accountId, errorCopyByStage, handleResetAfterSuccess, isIndonesian, router, toast]);
 
   return (
     <>
@@ -1667,6 +1751,32 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
               ? "Membantu pemindaian memahami format tanggal dan angka di struk."
               : "Helps the scanner understand the receipt’s date and number format."}
           </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label>{isIndonesian ? "Model AI" : "AI model"}</Label>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {reasoningModelOptions.map((option) => (
+              <label
+                key={option.value}
+                className={`flex cursor-pointer flex-col rounded-md border p-3 text-sm transition-colors ${reasoningModel === option.value ? "border-primary bg-primary/5" : "border-border/60 hover:border-primary/40"}`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name="reasoning-model"
+                    value={option.value}
+                    checked={reasoningModel === option.value}
+                    onChange={() => setReasoningModel(option.value)}
+                    disabled={isBusy}
+                    className="h-4 w-4 border-input text-primary focus:outline-none"
+                  />
+                  <span className="font-medium text-foreground">{option.label}</span>
+                </div>
+                <span className="mt-1 text-xs text-muted-foreground">{option.description}</span>
+              </label>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-2">
