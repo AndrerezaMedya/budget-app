@@ -20,22 +20,56 @@ const SUPPORTED_TYPES: Array<Database["public"]["Enums"]["transaction_type"]> = 
 type AccountCurrencyRow = Pick<Database["public"]["Tables"]["accounts"]["Row"], "id" | "currency">;
 
 type ParseDateOptions = {
-  timezoneOffsetMinutes?: number | null;
+  timeZone?: string | null;
 };
 
-function parseTimezoneOffset(value: FormDataEntryValue | null): number | null {
+function parseTimeZoneId(value: FormDataEntryValue | null): string | null {
   if (typeof value !== "string") {
     return null;
   }
   const trimmed = value.trim();
-  if (trimmed.length === 0) {
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function getTimeZoneOffset(timeZone: string, reference: Date): number | null {
+  try {
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hourCycle: "h23",
+    });
+
+    const parts = formatter.formatToParts(reference);
+    const byType = new Map(parts.map((part) => [part.type, part.value]));
+
+    const year = Number.parseInt(byType.get("year") ?? "", 10);
+    const month = Number.parseInt(byType.get("month") ?? "", 10);
+    const day = Number.parseInt(byType.get("day") ?? "", 10);
+    const hour = Number.parseInt(byType.get("hour") ?? "", 10);
+    const minute = Number.parseInt(byType.get("minute") ?? "", 10);
+    const second = Number.parseInt(byType.get("second") ?? "", 10);
+
+    if (
+      Number.isNaN(year)
+      || Number.isNaN(month)
+      || Number.isNaN(day)
+      || Number.isNaN(hour)
+      || Number.isNaN(minute)
+      || Number.isNaN(second)
+    ) {
+      return null;
+    }
+
+    const asUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+    return Math.round((asUtc - reference.getTime()) / 60_000);
+  } catch {
     return null;
   }
-  const parsed = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(parsed)) {
-    return null;
-  }
-  return parsed;
 }
 
 function parseDate(value: FormDataEntryValue | null, options: ParseDateOptions = {}): string | null {
@@ -48,28 +82,48 @@ function parseDate(value: FormDataEntryValue | null, options: ParseDateOptions =
     return null;
   }
 
-  const { timezoneOffsetMinutes } = options;
-  const hasExplicitZone = /[zZ]|[+-]\d{2}:\d{2}$/.test(trimmed);
+  const { timeZone } = options;
+  const hasZoneSuffix = /[zZ]|[+-]\d{2}:\d{2}$/.test(trimmed);
 
-  if (!hasExplicitZone && typeof timezoneOffsetMinutes === "number" && Number.isFinite(timezoneOffsetMinutes)) {
-    const needsSeconds = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed);
-    const base = needsSeconds ? `${trimmed}:00` : trimmed;
-    const absoluteOffset = Math.abs(timezoneOffsetMinutes);
-    const offsetHours = String(Math.floor(absoluteOffset / 60)).padStart(2, "0");
-    const offsetMinutes = String(absoluteOffset % 60).padStart(2, "0");
-    const sign = timezoneOffsetMinutes <= 0 ? "+" : "-";
-    const withOffset = `${base}${sign}${offsetHours}:${offsetMinutes}`;
-    const coerced = new Date(withOffset);
-    if (!Number.isNaN(coerced.getTime())) {
-      return coerced.toISOString();
+  if (!hasZoneSuffix && timeZone) {
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/);
+    if (match) {
+      const [, yearStr, monthStr, dayStr, hourStr, minuteStr, secondStr] = match;
+      const year = Number.parseInt(yearStr, 10);
+      const month = Number.parseInt(monthStr, 10);
+      const day = Number.parseInt(dayStr, 10);
+      const hour = Number.parseInt(hourStr, 10);
+      const minute = Number.parseInt(minuteStr, 10);
+      const second = secondStr ? Number.parseInt(secondStr, 10) : 0;
+
+      if (
+        !Number.isNaN(year)
+        && !Number.isNaN(month)
+        && !Number.isNaN(day)
+        && !Number.isNaN(hour)
+        && !Number.isNaN(minute)
+        && !Number.isNaN(second)
+      ) {
+        const naiveUtc = Date.UTC(year, month - 1, day, hour, minute, second);
+        const initialReference = new Date(naiveUtc);
+        const offsetMinutes = getTimeZoneOffset(timeZone, initialReference);
+        if (typeof offsetMinutes === "number") {
+          let adjusted = naiveUtc - offsetMinutes * 60_000;
+          const secondaryOffset = getTimeZoneOffset(timeZone, new Date(adjusted));
+          if (typeof secondaryOffset === "number" && secondaryOffset !== offsetMinutes) {
+            adjusted = naiveUtc - secondaryOffset * 60_000;
+          }
+          return new Date(adjusted).toISOString();
+        }
+      }
     }
   }
 
-  const fallback = new Date(trimmed);
-  if (Number.isNaN(fallback.getTime())) {
+  const parsed = new Date(trimmed);
+  if (Number.isNaN(parsed.getTime())) {
     return null;
   }
-  return fallback.toISOString();
+  return parsed.toISOString();
 }
 
 export async function createTransactionAction(
@@ -89,10 +143,8 @@ export async function createTransactionAction(
 
   const type = formData.get("type") as Database["public"]["Enums"]["transaction_type"] | null;
   const amountInput = formData.get("amount");
-  const timezoneOffset = parseTimezoneOffset(formData.get("timezoneOffset"));
-  const occurredAt = parseDate(formData.get("occurredAt"), {
-    timezoneOffsetMinutes: timezoneOffset,
-  });
+  const timeZone = parseTimeZoneId(formData.get("timeZone"));
+  const occurredAt = parseDate(formData.get("occurredAt"), { timeZone });
   const description = (formData.get("description") as string | null)?.trim() ?? null;
   const tagField = (formData.get("tagIds") as string | null)?.trim() ?? "";
   const incomingTagValues = tagField
@@ -324,10 +376,8 @@ export async function updateTransactionAction(
   }
 
   const description = (formData.get("description") as string | null)?.trim() ?? null;
-  const timezoneOffset = parseTimezoneOffset(formData.get("timezoneOffset"));
-  const occurredAt = parseDate(formData.get("occurredAt"), {
-    timezoneOffsetMinutes: timezoneOffset,
-  });
+  const timeZone = parseTimeZoneId(formData.get("timeZone"));
+  const occurredAt = parseDate(formData.get("occurredAt"), { timeZone });
 
   if (!occurredAt) {
     return { status: "error", message: "Provide a valid date." };
