@@ -14,10 +14,11 @@ export function formatCurrency(minorUnits: number, currency = DEFAULT_CURRENCY) 
   }).format(amount);
 }
 
-export function formatDate(value: string, locale = "id-ID") {
+export function formatDate(value: string, locale = "id-ID", timeZone?: string) {
   return new Intl.DateTimeFormat(locale, {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: timeZone ?? undefined,
   }).format(new Date(value));
 }
