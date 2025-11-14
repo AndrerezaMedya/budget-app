@@ -34,6 +34,7 @@ type EditableTransaction = {
 type EditTransactionButtonProps = {
   transaction: EditableTransaction;
   accounts: EditTransactionAccountOption[];
+  timeZone?: string | null;
 };
 
 const SELECT_BASE_CLASSES =
@@ -54,7 +55,33 @@ function formatMinorToInput(amountMinor: number, currency: string): string {
   return trimmed.length > 0 ? trimmed : "0";
 }
 
-function toLocalInputValue(iso: string): string {
+function formatDateTimeLocalInput(date: Date, timeZone: string): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(date);
+  const byType = new Map(parts.map((part) => [part.type, part.value]));
+  const year = byType.get("year");
+  const month = byType.get("month");
+  const day = byType.get("day");
+  const hour = byType.get("hour");
+  const minute = byType.get("minute");
+
+  if (!year || !month || !day || !hour || !minute) {
+    return date.toISOString().slice(0, 16);
+  }
+
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+
+function toLocalInputValue(iso: string, timeZone: string): string {
   if (!iso) {
     return "";
   }
@@ -62,12 +89,10 @@ function toLocalInputValue(iso: string): string {
   if (Number.isNaN(date.getTime())) {
     return "";
   }
-  const tzOffsetMinutes = date.getTimezoneOffset();
-  const localTime = new Date(date.getTime() - tzOffsetMinutes * 60_000);
-  return localTime.toISOString().slice(0, 16);
+  return formatDateTimeLocalInput(date, timeZone);
 }
 
-export function EditTransactionButton({ transaction, accounts }: EditTransactionButtonProps) {
+export function EditTransactionButton({ transaction, accounts, timeZone }: EditTransactionButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const defaultAccountId = useMemo(
     () => transaction.accountId ?? accounts[0]?.id ?? "",
@@ -86,11 +111,6 @@ export function EditTransactionButton({ transaction, accounts }: EditTransaction
   const { t } = useI18n();
   const [state, formAction, isPending] = useActionState(updateTransactionAction, initialActionState);
   const statusRef = useRef(state.status);
-  const [timezoneOffsetMinutes, setTimezoneOffsetMinutes] = useState("0");
-
-  useEffect(() => {
-    setTimezoneOffsetMinutes(String(new Date().getTimezoneOffset()));
-  }, []);
   const hasAccounts = accounts.length > 0;
   const isExpense = transaction.type === "expense";
   const isIncome = transaction.type === "income";
@@ -168,7 +188,16 @@ export function EditTransactionButton({ transaction, accounts }: EditTransaction
   const resolvedAccount = selectedAccountId ? accountMap.get(selectedAccountId) ?? null : null;
   const effectiveCurrency = (resolvedAccount?.currency ?? transaction.currency ?? DEFAULT_CURRENCY).toUpperCase();
   const amountDefault = formatMinorToInput(transaction.amountMinor, effectiveCurrency);
-  const occurredAtDefault = toLocalInputValue(transaction.occurredAt);
+  const effectiveTimeZone = useMemo(() => {
+    const incoming = timeZone && typeof timeZone === "string" ? timeZone.trim() : "";
+    if (incoming.length > 0) {
+      return incoming;
+    }
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return browserTimeZone ?? "UTC";
+  }, [timeZone]);
+
+  const occurredAtDefault = toLocalInputValue(transaction.occurredAt, effectiveTimeZone);
 
   return (
     <>
@@ -219,7 +248,7 @@ export function EditTransactionButton({ transaction, accounts }: EditTransaction
             </div>
             <form ref={formRef} action={formAction} className="space-y-4 px-4 py-4">
               <input type="hidden" name="transactionId" value={transaction.id} />
-              <input type="hidden" name="timezoneOffset" value={timezoneOffsetMinutes} />
+              <input type="hidden" name="timeZone" value={effectiveTimeZone} />
               <div className="space-y-2">
                 <Label htmlFor={`edit-transaction-account-${transaction.id}`}>Akun</Label>
                 <select

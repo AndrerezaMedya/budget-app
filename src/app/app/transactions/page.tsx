@@ -941,6 +941,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                 accounts={accountOptions}
                 tags={tagOptions}
                 defaultOccurredAt={defaultOccurredAt}
+                timeZone={timeZone}
               />
             </div>
           </div>
@@ -1180,6 +1181,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                                                 subcategorySlug: transaction.subcategorySlug,
                                               }}
                                               accounts={receiptAccountOptions}
+                                              timeZone={timeZone}
                                             />
                                           ) : null}
                                           <DeleteTransactionButton
@@ -1337,6 +1339,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                                         subcategorySlug: transaction.subcategorySlug,
                                       }}
                                       accounts={receiptAccountOptions}
+                                      timeZone={timeZone}
                                     />
                                   ) : null}
                                   <DeleteTransactionButton

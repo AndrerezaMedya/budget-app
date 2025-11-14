@@ -36,6 +36,7 @@ interface CreateTransactionFormProps {
   accounts: AccountOption[];
   tags: TagOption[];
   defaultOccurredAt: string;
+  timeZone?: string | null;
   displayMode?: "inline" | "floating";
 }
 
@@ -48,7 +49,7 @@ const TYPE_OPTIONS: Array<{ value: TransactionType; labelKey: "transactions.type
 const SELECT_BASE_CLASSES =
   "h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
 
-export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displayMode = "inline" }: CreateTransactionFormProps) {
+export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZone, displayMode = "inline" }: CreateTransactionFormProps) {
   const formRef = useRef<HTMLFormElement>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [transactionType, setTransactionType] = useState<TransactionType>("expense");
@@ -63,11 +64,14 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
   const statusRef = useRef(state.status);
   const [tagResetKey, setTagResetKey] = useState(0);
   const { t } = useI18n();
-  const [timezoneOffsetMinutes, setTimezoneOffsetMinutes] = useState("0");
-
-  useEffect(() => {
-    setTimezoneOffsetMinutes(String(new Date().getTimezoneOffset()));
-  }, []);
+  const effectiveTimeZone = useMemo(() => {
+    const incoming = typeof timeZone === "string" ? timeZone.trim() : "";
+    if (incoming.length > 0) {
+      return incoming;
+    }
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    return browserTimeZone ?? "UTC";
+  }, [timeZone]);
 
   useEffect(() => {
     if (state.status === statusRef.current) {
@@ -244,7 +248,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, displ
           action={formAction}
           className={formClasses}
         >
-          <input type="hidden" name="timezoneOffset" value={timezoneOffsetMinutes} />
+          <input type="hidden" name="timeZone" value={effectiveTimeZone} />
           <Button asChild variant="outline" size="sm" className="w-full justify-center">
             <Link href="/app/receipts">
               <Scan className="mr-2 h-4 w-4" />
