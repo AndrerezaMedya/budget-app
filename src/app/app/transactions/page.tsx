@@ -598,7 +598,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
   const last90StartDate = computeRollingStartDate(90);
 
   const describeRange = (start: string, end: string) =>
-    `${formatDate(`${start}T00:00:00.000Z`, locale)} - ${formatDate(`${end}T00:00:00.000Z`, locale)}`;
+    `${formatDate(`${start}T00:00:00.000Z`, locale, timeZone)} - ${formatDate(`${end}T00:00:00.000Z`, locale, timeZone)}`;
 
   type PresetConfig = {
     id: string;
@@ -802,7 +802,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
   }
 
   if (filters.startDate) {
-    const formatted = formatDate(`${filters.startDate}T00:00:00.000Z`, locale);
+    const formatted = formatDate(`${filters.startDate}T00:00:00.000Z`, locale, timeZone);
     activeFilterChips.push({
       id: "startDate",
       label: t("transactions.filters.active.startDate", { value: formatted }),
@@ -811,7 +811,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
   }
 
   if (filters.endDate) {
-    const formatted = formatDate(`${filters.endDate}T00:00:00.000Z`, locale);
+    const formatted = formatDate(`${filters.endDate}T00:00:00.000Z`, locale, timeZone);
     activeFilterChips.push({
       id: "endDate",
       label: t("transactions.filters.active.endDate", { value: formatted }),
@@ -849,6 +849,13 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       ? "transactions.accountSummary.delta.negative"
       : "transactions.accountSummary.delta.neutral";
 
+  const dateKeyFormatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
   const groupedTransactions = (() => {
     const groups = new Map<
       string,
@@ -860,7 +867,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
     >();
 
     for (const transaction of filteredTransactions) {
-      const dateKey = transaction.occurredAt.slice(0, 10);
+      const dateKey = dateKeyFormatter.format(new Date(transaction.occurredAt));
       let group = groups.get(dateKey);
       if (!group) {
         group = {
@@ -885,13 +892,14 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
       .map((group) => ({
         ...group,
-        label: formatDate(`${group.dateKey}T00:00:00.000Z`, locale),
+        label: formatDate(`${group.dateKey}T00:00:00.000Z`, locale, timeZone),
       }));
   })();
 
   const mobileTimeFormatter = new Intl.DateTimeFormat(locale, {
     hour: "2-digit",
     minute: "2-digit",
+    timeZone,
   });
 
   return (
@@ -1107,7 +1115,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
                               transaction.transferDirection,
                             );
                             const amountDisplay = formatCurrency(signedAmount, transaction.currency ?? undefined);
-                            const occurredOn = formatDate(transaction.occurredAt, locale);
+                            const occurredOn = formatDate(transaction.occurredAt, locale, timeZone);
 
                             return (
                               <tr key={transaction.id}>
