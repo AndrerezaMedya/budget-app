@@ -1,7 +1,7 @@
 # Budget App (Next.js) — Roadmap Pembaruan UI/UX Terpadu
 
-_Status: Draft v1.1 · Bahasa kerja: Indonesia/English campuran_  
-_Sumber: Sintesis dokumen internal & masukan terbaru (Nov 2025)_
+_Status: Draft v1.2 · Bahasa kerja: Indonesia/English campuran_  
+_Sumber: Sintesis dokumen internal & masukan terbaru (Nov 2025, pasca receipt + timezone update)_
 
 ---
 
@@ -33,12 +33,13 @@ _Sumber: Sintesis dokumen internal & masukan terbaru (Nov 2025)_
 
 ## 🔍 Snapshot Temuan Saat Ini
 
-- Tema gelap & tipografi sudah konsisten, tetapi action sekunder terlihat pasif/membingungkan.
-- Overview menampilkan KPI, namun penjelasan, delta, dan tautan mendalam belum tersedia.
-- Banyak bagian memakai placeholder/dashed box tanpa CTA jelas (empty/loading state perlu dipoles).
-- Modal filter transaksi bekerja, namun filter aktif tidak langsung terlihat dan belum bisa disimpan sebagai preset.
-- Layout masih fokus desktop; pengalaman mobile, stacking, dan touch target perlu audit.
-- Onboarding minim: pengguna baru tidak diarahkan langkah-langkah penting (buat akun, kategori, budget, dsb.).
+- Tema gelap & tipografi stabil; aksi sekunder perlu hierarki visual agar tidak tenggelam.
+- Overview masih memakai KPI placeholder—angka belum tersambung ke Supabase summary pipeline.
+- Empty/loading states sebagian sudah skeleton, namun beberapa modul (reports, budgets) masih placeholder tanpa CTA.
+- Filter transaksi sudah menampilkan chips aktif dan edit modal timezone-safe, tetapi belum ada preset yang bisa disimpan.
+- Layout desktop matang; mobile masih menunggu bottom nav + FAB untuk memenuhi target dua klik.
+- Receipt review dan toast mobile offset sudah solid; berikutnya fokus memberi jalan pintas dari receipt ke transaksi.
+- Onboarding checklist belum tersedia; pengguna baru masih menebak langkah pertama.
 
 ---
 
@@ -165,7 +166,7 @@ _Sumber: Sintesis dokumen internal & masukan terbaru (Nov 2025)_
 
 ### Milestone 2 — Transactions Experience (Sprint 3–4)
 
-- Sticky filter bar + chips + quick clear.
+- Sticky filter bar + chips + quick clear _(chips aktif sudah live; preset & bulk actions masih on-going)_.
 - Saved filter preset (This month, Last 30 days, Custom) & running balance panel.
 - Table upgrade: grouping per tanggal, sortable headers, sticky action column, bulk actions dengan toast undo.
 
@@ -177,7 +178,7 @@ _Sumber: Sintesis dokumen internal & masukan terbaru (Nov 2025)_
 
 ### Milestone 4 — Receipts + Budgets & Accounts (Sprint 7–9)
 
-- Receipt scanning: dropzone + kamera, state progres, preview dua kolom, CTA create transaction.
+- Receipt scanning: dropzone + kamera, state progres, preview dua kolom, CTA create transaction _(upload + review shipped; CTA create transaction dan re-scan flow berikutnya)_.
 - Budget grid dengan burn-rate by day, safe-to-spend ringkasan.
 - Accounts cards interaktif + diagram distribusi saldo.
 
@@ -313,8 +314,7 @@ export function BudgetProgress({
         />
       </div>
       <div className="mt-1 text-xs text-[var(--subtext)]">
-        Hari ke-{dayOfMonth} dari {daysInMonth}. Seharusnya ≤ {fmtIDR(expected)}
-        .
+        Hari ke-{dayOfMonth} dari {daysInMonth}. Seharusnya ≤ {fmtIDR(expected)}.
       </div>
     </div>
   );

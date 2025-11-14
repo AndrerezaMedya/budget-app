@@ -12,9 +12,9 @@ Welcome to your personal finance workspace. This guide walks you through every a
 
 ## Overview
 
-- Snapshot of combined cashflow, budget burn, and balances.
+- Snapshot cards show balances, recent cashflow, and upcoming work. Metrics currently run on placeholder data until the Supabase aggregate job lands.
 - Tiles update automatically after transactions roll in or budgets change.
-- Use this page to confirm data synced after imports or manual entries.
+- Use this page to confirm data synced after imports, manual entries, or receipt approvals.
 
 ## Transactions
 
@@ -57,10 +57,18 @@ Welcome to your personal finance workspace. This guide walks you through every a
 
 > 📥 Tip: Validate your CSV locally before upload (check for UTF-8 encoding and consistent column headers) to avoid ingestion errors.
 
+## Receipts
+
+- Upload images or PDFs and pick the Gemini model (Flash by default, Pro for higher confidence).
+- Parsed content is reviewed on the receipts detail page before any ledger changes occur.
+- Duplicates are flagged using Supabase hash checks; you can reprocess a receipt if OCR confidence is low.
+
+> 🧾 Tip: Keep receipt filenames descriptive—search uses both file name and merchant text from Gemini.
+
 ## Settings
 
 - Manage profile, workspace preferences, category tree, and integrations.
-- Workspace timezone defaults to UTC+7 (Asia/Jakarta); adjust via Supabase `profiles` if needed.
+- Set your preferred timezone in the profile form; all timestamps stay UTC in the database and render in your local selection.
 - Use _Add category_ to create categories and pick from curated icon and color options for consistent visuals.
 - Switch the interface between English and Bahasa Indonesia from the language selector.
 - Theme toggle lives in the global header for quick light/dark switching.

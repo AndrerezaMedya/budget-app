@@ -1,135 +1,92 @@
-## dY Personal Finance Tracker — Project Handbook
+## dY Personal Finance Tracker — Workspace Handbook (Docs Copy)
 
-This repository contains the Next.js App Router workspace that powers the budgeting app. The handbook captures the latest technical status, UI/UX direction, and onboarding steps for teammates (human or agent) joining midstream.
-
----
-
-### 1. Stack & Architecture Snapshot
-
-- **Framework**: Next.js 16 (App Router + Turbopack) with TypeScript
-- **Styling**: Tailwind CSS with custom design tokens defined in `tailwind.config.ts`
-- **UI primitives**: shadcn/ui-inspired components under `src/components/ui`
-- **Data layer**: Supabase (Auth, Postgres, RLS) via `@supabase/ssr` (migration in progress from legacy helpers)
-- **Forms & validation**: `react-hook-form`, `zod`
-- **Icons & charts**: `lucide-react`, planned Recharts for analytics widgets
-
-```
-src/
-  app/
-    (auth)/         // Sign-in route & layout
-    (app)/          // Authenticated workspace routes (overview, budgets, etc.)
-    auth/callback   // Supabase OAuth exchange handler
-    layout.tsx      // Root layout wiring Theme + Auth providers
-    page.tsx        // Landing/roadmap (public)
-  components/
-    forms/          // Transaction forms, filter sheets
-    layout/         // AppShell, theme toggle
-    providers/      // Theme + Supabase auth contexts
-    ui/             // Button, Card, Badge, Input, Label primitives
-  config/           // Environment validation (Zod)
-  lib/
-    supabase/      // Supabase browser/server helpers (needs Next 16 upgrade)
-    format.ts      // Currency/date formatting helpers
-  types/            // Domain models (ledger, summaries)
-  ...
-```
-
-See `ui-ux-roadmap.md` for the latest product/design plan.
+This document mirrors the root handbook but stays close to `/app` assets so Storybook/Design builds can surface context. If you already read the root `README.md`, skim the highlights and quick links below.
 
 ---
 
-### 2. Environment & Supabase Setup
+### 1. Stack Snapshot (Nov 2025)
 
-1. Copy `.env.local.example` → `.env.local` and populate values from **Supabase → Project Settings → API**.
-2. In Supabase dashboard:
-   - **Auth → URL Configuration**: `http://localhost:3000` for development.
-   - **Auth → Providers**: enable Email/Password and Google. Set redirect URL `http://localhost:3000/auth/callback` (add production domain later).
-3. CLI workflow (after `npx supabase login` and `supabase link --project-ref hxrazeushtyfusxpyoeg`):
+- Next.js 16 App Router (RSC + Turbopack) with TypeScript
+- Tailwind CSS design tokens; dark-mode-first theming
+- shadcn/ui-flavoured primitives in `src/components/ui`
+- Supabase Auth/Postgres/RLS via `@supabase/ssr`
+- Receipt ingestion backed by Google Gemini 2.5 Flash/Pro (selectable per upload)
+- Transaction flows with timezone-safe datetime handling and toast notifications that respect mobile safe areas
 
-   ```bash
-   pnpm db:migrate   # push schema in supabase/migrations
-   pnpm db:reset     # reset local DB + run seed.sql
-   pnpm db:studio    # open Supabase Studio locally
-   ```
-
-4. `supabase/migrations/202411050001_init_core.sql` seeds core tables (accounts, categories, transactions, budgets, summaries) + RLS policies + helper function `create_workspace_seed(user_id uuid)`.
-5. `supabase/seed.sql` primes demo data. Run `select public.create_workspace_seed('<user_uuid>');` after creating a user.
+Production build now passes (`pnpm build`).
 
 ---
 
-### 3. Runtime Flow Overview
+### 2. Environment & Secrets Checklist
 
-- Root layout fetches Supabase session server-side; `AuthProvider` hydrates client context.
-- Routes under `(app)` guard anonymous visitors and redirect to `/sign-in`.
-- `/auth/callback` handles OAuth exchange and forwards via `redirectTo` query (default `/app/overview`).
-- `ThemeProvider` exposes light/dark toggles; design tokens power consistent theming.
+1. Copy `.env.local.example` → `.env.local`, populate:
 
----
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_STORAGE_BUCKET=receipts`
+- `GEMINI_API_KEY`, optional `RECEIPT_MODEL_OVERRIDE`
+- `NEXT_PUBLIC_APP_URL`
 
-### 4. Development Commands
+2. Supabase console
+
+- Auth redirect: `http://localhost:3000/auth/callback`
+- Storage policy: apply `202511120001_receipts_storage_policy.sql`
+
+3. CLI helpers (after `supabase link`):
 
 ```bash
-pnpm install    # install dependencies
-pnpm dev        # start dev server (Next picks free port if 3000 busy)
-pnpm lint       # eslint (includes react-hooks, jsx-a11y rules)
-pnpm build      # production build (currently blocked by Supabase helper migration)
+pnpm db:migrate
+pnpm db:reset
+pnpm db:studio
 ```
 
-**Warnings to watch:**
+4. Seed demo data via `select public.create_workspace_seed('<user_uuid>');`.
 
-- Turbopack warns about multiple lockfiles; ensure root `package-lock.json` is removed.
-- When testing over LAN, configure `next.config.ts` `allowedOrigins` to quiet dev warnings.
-
----
-
-### 5. Current Status & Highlights (Nov 2025)
-
-- Supabase replaces Firebase; schema, RLS, and seed helpers are in place.
-- UI shell for authenticated workspace (overview, transactions, budgets, reports, accounts, imports, settings) is scaffolded.
-- Transaction filters modal rebuilt with type-aware category logic and improved UX for transfer type (Nov 2025).
-- `ui-ux-roadmap.md` documents unified design roadmap covering tokens, navigation, and phased delivery.
-- Lint passes; build remains blocked pending new Supabase helpers (`@supabase/ssr`).
+Gemini calls stay server-side—never expose the key to the browser.
 
 ---
 
-### 6. Open Issues / Next Steps
+### 3. Feature Highlights
 
-1. **Supabase helper upgrade (blocking build)**: migrate `src/lib/supabase/server.ts` & related utilities to `@supabase/ssr`. Current implementation fails during `pnpm build` because Next 16 now returns async cookies.
-2. **Data layer queries**: finalize typed Supabase client wrappers and implement queries for accounts, categories, transactions (including paired transfers) in `src/lib/supabase/queries/*`.
-3. **Summary pipeline**: add Edge Functions/cron job to refresh `category_monthly_summaries` and `account_daily_summaries`.
-4. **UI hardening**: replace placeholder dashboard widgets with live data, charts, and responsive layouts per roadmap.
-5. **Responsive navigation**: implement mobile bottom nav + FAB as defined in roadmap.
-6. **Automation**: establish CI (lint/test) and consider Playwright for E2E once ledger flows exist.
-
----
-
-### 7. Recommended Upcoming PRs
-
-1. Migrate Supabase server helpers to `@supabase/ssr`; update browser client accordingly.
-2. Generate Supabase types (`supabase gen types typescript --linked`) and apply across data utilities.
-3. Implement accounts & categories CRUD flows (forms, server actions, optimistic UI).
-4. Wire recent transactions fetch with filters + TanStack Table virtualization.
-5. Apply design tokens + metric cards from `ui-ux-roadmap.md` to Overview page.
-6. Introduce global period switcher and ensure filters respect it.
-7. Set up CI pipeline (GitHub Actions) running lint + typecheck.
+- Receipt upload form polls ingestion jobs, handles signed URLs, and lets users choose Gemini Flash vs Pro.
+- Review page awaits Next.js 16 async params correctly, preventing race conditions before Supabase data is ready.
+- Transaction create/edit flows honour `profiles.timeZone`, eliminating the previous +7h drift when saving.
+- Toast provider offsets using `--app-mobile-nav-offset`, keeping notifications visible above the bottom nav.
+- Supabase clients in `src/lib/supabase` share typed helpers for actions, API routes, and RSC usage.
 
 ---
 
-### 8. Reference Files
+### 4. Dev Commands
 
-- `Init Budgeting Apps README.md` — initial product spec & milestones.
-- `ui-ux-roadmap.md` — consolidated UX roadmap (v1.1).
-- `src/lib/supabase/*` — Supabase client utils (requires upgrade).
-- `src/app/(app)/transactions/page.tsx` — filter integration + table logic.
-- `supabase/migrations/` & `supabase/seed.sql` — schema + seed routines.
+```bash
+pnpm install
+pnpm dev
+pnpm lint
+pnpm build
+```
+
+Tests/CI are on the roadmap; track items under “Active Backlog Themes.”
 
 ---
 
-### 9. Handover Notes
+### 5. Active Backlog Themes
 
-- Production build currently fails until Supabase helper migration is complete.
-- All new UI work should align with `ui-ux-roadmap.md`; keep the roadmap updated after major changes.
-- Remove legacy Firebase references; everything now assumes Supabase stack.
-- Maintain this handbook as the living source of truth for agents & contributors.
+| Theme             | Focus                                                                                  |
+| ----------------- | -------------------------------------------------------------------------------------- |
+| Receipt → Ledger  | Create ledger entries directly from processed receipts (prefill modal, allow re-scan). |
+| Overview Metrics  | Replace placeholder KPI cards with live Supabase aggregates + cached API routes.       |
+| Summary Jobs      | Schedule refresh of `account_daily_summaries` and `category_monthly_summaries`.        |
+| Mobile Navigation | Ship bottom navigation + FAB per roadmap, leveraging toast safe-area work.             |
+| Testing & CI      | Introduce Vitest/Playwright suites and GitHub Actions coverage.                        |
 
-> Need deeper product context? See `../Init Budgeting Apps README.md` for the original blueprint and milestones.
+---
+
+### 6. Quick References
+
+- `../../README.md` — root handbook (full detail)
+- `../../Init Budgeting Apps README.md` — product + architecture blueprint (Supabase revision)
+- `../usage-guide.md` — user-facing walkthrough updated with receipt & timezone flows
+- `../overview-charts-hardening.md` — perf checklist for overview charts
+- `../ui-ux-roadmap.md` — design system + milestone plan
+- `../../app/TODO-receipt-ingestion.md` — engineering backlog for OCR ingestion
+
+Keep this doc aligned with the root handbook whenever priorities or stack details change.
