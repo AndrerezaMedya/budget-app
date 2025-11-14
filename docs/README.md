@@ -28,7 +28,7 @@ Production build now passes (`pnpm build`).
 
 2. Supabase console
 
-- Auth redirect: `http://localhost:3000/auth/callback`
+- Auth redirect: `http://localhost:3000/auth/callback`, `https://hxrazeushtyfusxpyoeg.supabase.co/auth/v1/callback`
 - Storage policy: apply `202511120001_receipts_storage_policy.sql`
 
 3. CLI helpers (after `supabase link`):
