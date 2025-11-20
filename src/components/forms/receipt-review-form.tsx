@@ -484,11 +484,14 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                 <div className="space-y-4">
                     <div className="overflow-hidden rounded-lg border border-border/60 bg-muted/20">
                         {storagePreviewUrl ? (
-                            <img
-                                src={storagePreviewUrl}
-                                alt={isIndonesian ? "Foto struk" : "Receipt image"}
-                                className="w-full max-h-[420px] object-cover"
-                            />
+                            <>
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    src={storagePreviewUrl}
+                                    alt={isIndonesian ? "Foto struk" : "Receipt image"}
+                                    className="w-full max-h-[420px] object-cover"
+                                />
+                            </>
                         ) : (
                             <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
                                 {isIndonesian
