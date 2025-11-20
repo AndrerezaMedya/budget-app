@@ -64,6 +64,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
   const timestampRef = useRef(state.timestamp);
   const [tagResetKey, setTagResetKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const { t } = useI18n();
   const effectiveTimeZone = useMemo(() => {
     const incoming = typeof timeZone === "string" ? timeZone.trim() : "";
@@ -88,6 +89,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
         variant: "success",
       });
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
       const frame = requestAnimationFrame(() => {
         formRef.current?.reset();
         setTransactionType("expense");
@@ -110,6 +112,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
         variant: "error",
       });
       setIsSubmitting(false);
+      isSubmittingRef.current = false;
     }
   }, [state.status, state.message, state.timestamp, toast, t]);
 
@@ -248,6 +251,10 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
         <form
           ref={formRef}
           action={async (formData: FormData) => {
+            if (isSubmittingRef.current) {
+              return;
+            }
+            isSubmittingRef.current = true;
             setIsSubmitting(true);
             await formAction(formData);
           }}
