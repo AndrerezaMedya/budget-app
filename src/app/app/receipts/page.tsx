@@ -214,7 +214,7 @@ export default async function ReceiptsPage() {
                         </Badge>
                       ) : null}
                       <div className="pt-2">
-                        <Button size="sm" variant="outline" asChild className="w-full">
+                        <Button size="sm" variant="outline" asChild className="w-full h-auto whitespace-normal">
                           <Link href={`/app/receipts/review/${receipt.id}`}>
                             {t("transactions.receipts.action.add")}
                           </Link>
