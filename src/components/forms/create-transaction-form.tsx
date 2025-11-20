@@ -61,7 +61,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
   const [transferToId, setTransferToId] = useState<string>("");
   const [state, formAction] = useActionState(createTransactionAction, initialActionState);
   const { toast } = useToast();
-  const statusRef = useRef(state.status);
+  const timestampRef = useRef(state.timestamp);
   const [tagResetKey, setTagResetKey] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { t } = useI18n();
@@ -75,11 +75,11 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
   }, [timeZone]);
 
   useEffect(() => {
-    if (state.status === statusRef.current) {
+    if (state.timestamp === timestampRef.current) {
       return;
     }
 
-    statusRef.current = state.status;
+    timestampRef.current = state.timestamp;
 
     if (state.status === "success") {
       toast({
@@ -111,7 +111,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
       });
       setIsSubmitting(false);
     }
-  }, [state.status, state.message, toast, t]);
+  }, [state.status, state.message, state.timestamp, toast, t]);
 
   const toggle = () => {
     setIsOpen((prev) => {
