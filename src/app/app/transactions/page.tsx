@@ -916,8 +916,8 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
       </header>
 
       <div className="space-y-3">
-        <div className="rounded-3xl border border-border/70 bg-surface/80 px-4 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/60">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="rounded-3xl border border-border/70 bg-surface/80 py-3 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-surface/60">
+          <div className="flex flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="w-full sm:max-w-sm">
               <TransactionsSearchInput
                 initialValue={filters.query ?? ""}
