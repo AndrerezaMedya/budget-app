@@ -85,7 +85,7 @@ export function TransactionsSearchInput({ initialValue, label, placeholder, clea
         value={value}
         onChange={(event) => setValue(event.target.value)}
         placeholder={placeholder}
-        className="h-6 flex-1 border-none bg-transparent p-0 text-sm text-foreground shadow-none focus-visible:outline-none focus-visible:ring-0"
+        className="h-6 flex-1 border-none bg-transparent p-0 text-base text-foreground shadow-none focus-visible:outline-none focus-visible:ring-0 md:text-sm"
         aria-label={label}
         disabled={isPending}
       />
