@@ -555,9 +555,11 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
             <Button type="button" variant="outline" onClick={toggle} disabled={isSubmitting}>
               {t("transactions.toggle.close")}
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? t("transactions.saving") : t("transactions.save")}
-            </Button>
+            <div className={isSubmitting ? "cursor-not-allowed" : ""}>
+              <Button type="submit" disabled={isSubmitting} className={isSubmitting ? "pointer-events-none" : ""}>
+                {isSubmitting ? t("transactions.saving") : t("transactions.save")}
+              </Button>
+            </div>
           </div>
         </form>
       ) : null}
