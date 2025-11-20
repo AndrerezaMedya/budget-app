@@ -21,7 +21,7 @@ type OverviewChartsWarningProps = {
 
 type RetryState = "idle" | "pending" | "error" | "success";
 
-export function OverviewChartsWarning({ period, errorMessage, messages }: OverviewChartsWarningProps) {
+export function OverviewChartsWarning({ period, messages }: OverviewChartsWarningProps) {
   const router = useRouter();
   const [status, setStatus] = useState<RetryState>("idle");
   const [retryError, setRetryError] = useState<string | null>(null);
