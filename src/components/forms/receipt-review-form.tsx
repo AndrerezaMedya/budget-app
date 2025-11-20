@@ -536,7 +536,7 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                             <select
                                 id="receipt-review-account"
                                 name="accountId"
-                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                className="h-9 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
                                 value={accountId}
                                 onChange={(event) => setAccountId(event.target.value)}
                                 required
@@ -618,7 +618,7 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                                 <select
                                     id="receipt-currency"
                                     name="currency"
-                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
                                     value={receiptDraft.currency}
                                     onChange={(event) => handleDraftChange("currency", event.target.value)}
                                 >
@@ -688,7 +688,7 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                             <textarea
                                 id="receipt-notes"
                                 name="notes"
-                                className="min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                                className="min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:text-sm"
                                 value={receiptDraft.notes}
                                 onChange={(event) => handleDraftChange("notes", event.target.value)}
                                 placeholder={isIndonesian ? "Catatan tambahan (opsional)" : "Additional notes (optional)"}
@@ -785,7 +785,7 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                                                         </Label>
                                                         <select
                                                             id={`receipt-line-category-parent-${index}`}
-                                                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                                            className="h-9 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
                                                             value={item.categoryParent}
                                                             onChange={(event) => {
                                                                 handleLineItemFieldChange(index, "categoryParent", event.target.value);
@@ -803,7 +803,7 @@ export function ReceiptReviewForm({ receipt, accounts, defaultAccountId }: Recei
                                                         </select>
                                                         <select
                                                             id={`receipt-line-category-child-${index}`}
-                                                            className="mt-2 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+                                                            className="mt-2 h-9 w-full rounded-md border border-input bg-background px-3 text-base md:text-sm"
                                                             value={item.categoryChild}
                                                             onChange={(event) => handleLineItemFieldChange(index, "categoryChild", event.target.value)}
                                                             disabled={!item.categoryParent || children.length === 0}

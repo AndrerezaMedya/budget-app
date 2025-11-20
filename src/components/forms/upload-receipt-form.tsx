@@ -46,7 +46,7 @@ const AUTO_STAGE_STEP_MS = 2200;
 const CATCHUP_STAGE_STEP_MS = 420;
 
 const TEXTAREA_BASE_CLASSES =
-  "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2";
+  "min-h-[6rem] w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:text-sm";
 
 const DROPZONE_BASE_CLASSES =
   "relative flex w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-border/80 bg-muted/20 px-4 py-8 text-center text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:px-6 sm:py-10";
