@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/providers/auth-provider";
 import { I18nProvider } from "@/components/providers/i18n-provider";
@@ -25,12 +25,13 @@ export const metadata: Metadata = {
   title: "dY Personal Finance Tracker",
   description:
     "Offline-first budgeting app for tracking accounts, budgets, and cash flow with Next.js and Supabase.",
-  viewport: {
-    width: "device-width",
-    initialScale: 1,
-    maximumScale: 1,
-    userScalable: false,
-  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export const dynamic = "force-dynamic";
