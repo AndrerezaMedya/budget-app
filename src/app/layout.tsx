@@ -25,6 +25,12 @@ export const metadata: Metadata = {
   title: "dY Personal Finance Tracker",
   description:
     "Offline-first budgeting app for tracking accounts, budgets, and cash flow with Next.js and Supabase.",
+  viewport: {
+    width: "device-width",
+    initialScale: 1,
+    maximumScale: 1,
+    userScalable: false,
+  },
 };
 
 export const dynamic = "force-dynamic";
