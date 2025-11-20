@@ -306,7 +306,7 @@ export function TransactionsFilterButton({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant={triggerVariant} size="sm" type="button" aria-pressed={open} className="h-auto whitespace-normal text-left">
+        <Button variant={triggerVariant} size="sm" type="button" aria-pressed={open} className="h-auto min-h-9 whitespace-normal text-left py-2">
           {triggerLabel}
         </Button>
       </DialogTrigger>

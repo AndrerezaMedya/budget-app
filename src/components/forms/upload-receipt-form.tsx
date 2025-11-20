@@ -1833,7 +1833,7 @@ export function UploadReceiptForm({ accounts }: UploadReceiptFormProps) {
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="submit" disabled={isBusy || !hasAccounts} className="h-auto whitespace-normal">
+            <Button type="submit" disabled={isBusy || !hasAccounts} className="h-auto min-h-10 whitespace-normal py-2">
               {state.status === "uploading"
                 ? isIndonesian
                   ? "Mengunggah..."

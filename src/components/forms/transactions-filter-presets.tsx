@@ -81,7 +81,7 @@ export function TransactionsFilterPresets({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" type="button" disabled={isPending} className="h-auto whitespace-normal text-left">
+        <Button variant="ghost" size="sm" type="button" disabled={isPending} className="h-auto min-h-9 whitespace-normal text-left py-2">
           {buttonLabel}
         </Button>
       </DropdownMenuTrigger>

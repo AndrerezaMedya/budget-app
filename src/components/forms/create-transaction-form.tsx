@@ -142,7 +142,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
   const triggerClassName =
     displayMode === "floating"
       ? `h-14 w-14 rounded-full shadow-lg ${isOpen ? "bg-secondary text-secondary-foreground" : ""}`
-      : "inline-flex items-center gap-2 sm:w-auto h-auto whitespace-normal text-left";
+      : "inline-flex items-center gap-2 sm:w-auto h-auto min-h-9 whitespace-normal text-left py-2";
 
   const triggerSize = displayMode === "floating" ? "icon" : "sm";
 
