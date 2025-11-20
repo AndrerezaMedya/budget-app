@@ -136,7 +136,7 @@ export async function createTransactionAction(
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return { status: "error", message: "You must be signed in." };
+    return { status: "error", message: "You must be signed in.", timestamp: Date.now() };
   }
 
   const userId = user.id;
@@ -153,11 +153,11 @@ export async function createTransactionAction(
   const tagIds = Array.from(new Set(incomingTagValues.filter((value) => value.length > 0)));
 
   if (!type || !SUPPORTED_TYPES.includes(type)) {
-    return { status: "error", message: "Select a valid transaction type." };
+    return { status: "error", message: "Select a valid transaction type.", timestamp: Date.now() };
   }
 
   if (!occurredAt) {
-    return { status: "error", message: "Provide a valid date." };
+    return { status: "error", message: "Provide a valid date.", timestamp: Date.now() };
   }
 
   if (type === "transfer") {
@@ -165,11 +165,11 @@ export async function createTransactionAction(
     const toAccountId = formData.get("toAccountId") as string | null;
 
     if (!fromAccountId || !toAccountId) {
-      return { status: "error", message: "Choose both source and destination accounts." };
+      return { status: "error", message: "Choose both source and destination accounts.", timestamp: Date.now() };
     }
 
     if (fromAccountId === toAccountId) {
-      return { status: "error", message: "Accounts must be different for transfers." };
+      return { status: "error", message: "Accounts must be different for transfers.", timestamp: Date.now() };
     }
 
     const { data: accountRows, error: accountError } = await supabase
@@ -179,7 +179,7 @@ export async function createTransactionAction(
       .eq("user_id", userId);
 
     if (accountError) {
-      return { status: "error", message: accountError.message };
+      return { status: "error", message: accountError.message, timestamp: Date.now() };
     }
 
     const currencyMap = new Map<string, string>();
@@ -191,21 +191,21 @@ export async function createTransactionAction(
     const toCurrency = currencyMap.get(toAccountId);
 
     if (!fromCurrency || !toCurrency) {
-      return { status: "error", message: "Unable to resolve account currencies." };
+      return { status: "error", message: "Unable to resolve account currencies.", timestamp: Date.now() };
     }
 
     if (fromCurrency !== toCurrency) {
-      return { status: "error", message: "Transfers between different currencies are not supported yet." };
+      return { status: "error", message: "Transfers between different currencies are not supported yet.", timestamp: Date.now() };
     }
 
   const amountMinor = parseAmountToMinor(amountInput, fromCurrency);
     if (amountMinor === null) {
-      return { status: "error", message: "Enter a positive amount." };
+      return { status: "error", message: "Enter a positive amount.", timestamp: Date.now() };
     }
 
     const adminFeeMinor = parseAmountToMinor(formData.get("adminFee"), fromCurrency, { allowZero: true });
     if (adminFeeMinor === null) {
-      return { status: "error", message: "Enter a valid admin fee." };
+      return { status: "error", message: "Enter a valid admin fee.", timestamp: Date.now() };
     }
 
     const transferMetadata = JSON.stringify({ transferAmountMinor: amountMinor, adminFeeMinor });
@@ -244,19 +244,19 @@ export async function createTransactionAction(
     const { error } = await supabase.from("transactions").insert(rows);
 
     if (error) {
-      return { status: "error", message: error.message };
+      return { status: "error", message: error.message, timestamp: Date.now() };
     }
 
     revalidatePath("/app/transactions");
     revalidatePath("/app/overview");
     revalidatePath("/app/accounts");
 
-    return { status: "success", message: "Transfer recorded." };
+    return { status: "success", message: "Transfer recorded.", timestamp: Date.now() };
   }
 
   const accountId = formData.get("accountId") as string | null;
   if (!accountId) {
-    return { status: "error", message: "Select an account." };
+    return { status: "error", message: "Select an account.", timestamp: Date.now() };
   }
   const { data: accountRow, error: accountError } = await supabase
     .from("accounts")
@@ -266,18 +266,18 @@ export async function createTransactionAction(
     .maybeSingle();
 
   if (accountError) {
-    return { status: "error", message: accountError.message };
+    return { status: "error", message: accountError.message, timestamp: Date.now() };
   }
 
   if (!accountRow) {
-    return { status: "error", message: "Unable to resolve account." };
+    return { status: "error", message: "Unable to resolve account.", timestamp: Date.now() };
   }
 
   const accountCurrency = normalizeCurrency(accountRow.currency);
   const amountMinor = parseAmountToMinor(amountInput, accountCurrency);
 
   if (amountMinor === null) {
-    return { status: "error", message: "Enter a positive amount." };
+    return { status: "error", message: "Enter a positive amount.", timestamp: Date.now() };
   }
 
   let categoryId: string | null = null;
@@ -306,7 +306,7 @@ export async function createTransactionAction(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to resolve category.";
-    return { status: "error", message };
+    return { status: "error", message, timestamp: Date.now() };
   }
 
   const { data: transactionInsert, error } = await supabase
@@ -326,7 +326,7 @@ export async function createTransactionAction(
     .single();
 
   if (error) {
-    return { status: "error", message: error.message };
+    return { status: "error", message: error.message, timestamp: Date.now() };
   }
 
   const insertedId = transactionInsert?.id;
@@ -341,7 +341,7 @@ export async function createTransactionAction(
 
     if (tagError) {
       await supabase.from("transactions").delete().eq("id", insertedId);
-      return { status: "error", message: tagError.message };
+      return { status: "error", message: tagError.message, timestamp: Date.now() };
     }
   }
 
@@ -353,7 +353,7 @@ export async function createTransactionAction(
     revalidatePath("/app/settings");
   }
 
-  return { status: "success", message: "Transaction added." };
+  return { status: "success", message: "Transaction added.", timestamp: Date.now() };
 }
 
 export async function updateTransactionAction(
@@ -398,17 +398,17 @@ export async function updateTransactionAction(
   }
 
   if (!existingTransaction) {
-    return { status: "error", message: "Transaction not found." };
+    return { status: "error", message: "Transaction not found.", timestamp: Date.now() };
   }
 
   if (existingTransaction.type === "transfer") {
-    return { status: "error", message: "Transfers cannot be edited here yet." };
+    return { status: "error", message: "Transfers cannot be edited here yet.", timestamp: Date.now() };
   }
 
   const resolvedAccountId = requestedAccountId ?? existingTransaction.account_id;
 
   if (!resolvedAccountId) {
-    return { status: "error", message: "Select a destination account." };
+    return { status: "error", message: "Select a destination account.", timestamp: Date.now() };
   }
 
   const { data: accountRow, error: accountError } = await supabase
@@ -477,7 +477,7 @@ export async function updateTransactionAction(
     .eq("user_id", user.id);
 
   if (updateError) {
-    return { status: "error", message: updateError.message };
+    return { status: "error", message: updateError.message, timestamp: Date.now() };
   }
 
   revalidatePath("/app/transactions");
@@ -488,7 +488,7 @@ export async function updateTransactionAction(
     revalidatePath("/app/settings");
   }
 
-  return { status: "success", message: "Transaction updated." };
+  return { status: "success", message: "Transaction updated.", timestamp: Date.now() };
 }
 
 export async function deleteTransactionAction(
@@ -522,7 +522,7 @@ export async function deleteTransactionAction(
   }
 
   if (!transactionRow) {
-    return { status: "error", message: "Transaction not found." };
+    return { status: "error", message: "Transaction not found.", timestamp: Date.now() };
   }
 
   const idsToDelete = new Set<string>([transactionId]);
@@ -535,7 +535,7 @@ export async function deleteTransactionAction(
       .eq("user_id", user.id);
 
     if (relatedError) {
-      return { status: "error", message: relatedError.message };
+      return { status: "error", message: relatedError.message, timestamp: Date.now() };
     }
 
     (relatedRows as Array<{ id: string }> | null)?.forEach((row) => idsToDelete.add(row.id));
@@ -547,7 +547,7 @@ export async function deleteTransactionAction(
     .in("id", Array.from(idsToDelete));
 
   if (deleteError) {
-    return { status: "error", message: deleteError.message };
+    return { status: "error", message: deleteError.message, timestamp: Date.now() };
   }
 
   revalidatePath("/app/transactions");
@@ -555,5 +555,5 @@ export async function deleteTransactionAction(
   revalidatePath("/app/accounts");
   revalidatePath("/app/budgets");
 
-  return { status: "success", message: "Transaction deleted." };
+  return { status: "success", message: "Transaction deleted.", timestamp: Date.now() };
 }
