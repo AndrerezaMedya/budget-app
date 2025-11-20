@@ -63,6 +63,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
   const { toast } = useToast();
   const statusRef = useRef(state.status);
   const [tagResetKey, setTagResetKey] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const { t } = useI18n();
   const effectiveTimeZone = useMemo(() => {
     const incoming = typeof timeZone === "string" ? timeZone.trim() : "";
@@ -86,7 +87,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
         description: state.message,
         variant: "success",
       });
-
+      setIsSubmitting(false);
       const frame = requestAnimationFrame(() => {
         formRef.current?.reset();
         setTransactionType("expense");
@@ -108,6 +109,7 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
         description: state.message,
         variant: "error",
       });
+      setIsSubmitting(false);
     }
   }, [state.status, state.message, toast, t]);
 
@@ -245,7 +247,10 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
       {isOpen && hasAccounts ? (
         <form
           ref={formRef}
-          action={formAction}
+          action={async (formData: FormData) => {
+            setIsSubmitting(true);
+            await formAction(formData);
+          }}
           className={formClasses}
         >
           <input type="hidden" name="timeZone" value={effectiveTimeZone} />
@@ -547,10 +552,12 @@ export function CreateTransactionForm({ accounts, tags, defaultOccurredAt, timeZ
           </div>
 
           <div className="flex items-center justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={toggle}>
+            <Button type="button" variant="outline" onClick={toggle} disabled={isSubmitting}>
               {t("transactions.toggle.close")}
             </Button>
-            <Button type="submit">{t("transactions.save")}</Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? t("transactions.saving") : t("transactions.save")}
+            </Button>
           </div>
         </form>
       ) : null}
