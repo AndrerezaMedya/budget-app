@@ -1029,7 +1029,7 @@ export default async function TransactionsPage({ searchParams }: { searchParams?
           ) : null}
         </CardHeader>
         <CardContent>
-          <div className="mx-auto w-full max-w-[25rem] md:max-w-none">
+          <div className="mx-auto w-full md:max-w-none">
             <div className="overflow-hidden rounded-lg border border-border">
               <table className="hidden min-w-full divide-y divide-border text-sm md:table">
                 <thead className="bg-muted/50 text-xs uppercase tracking-wide text-muted-foreground">
