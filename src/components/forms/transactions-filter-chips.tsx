@@ -80,7 +80,7 @@ export function TransactionsFilterChips({
             key={chip.id}
             className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/70 px-3 py-1 text-xs text-foreground"
           >
-            <span className="truncate">{chip.label}</span>
+            <span className="truncate max-w-[12rem]">{chip.label}</span>
             <button
               type="button"
               className="rounded-full p-1 text-muted-foreground transition hover:text-foreground"
