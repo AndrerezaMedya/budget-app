@@ -1,4 +1,4 @@
-## dY Personal Finance Tracker — Project Handbook
+## Personal Finance Tracker — Project Handbook
 
 This repo hosts the Next.js App Router implementation that backs the "Init Budgeting Apps README" blueprint. Treat this document as the source of truth for teammates (human or agent) joining midstream.
 
